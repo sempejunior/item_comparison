@@ -2,7 +2,7 @@
 id: SPEC-004
 title: AI Features
 version: v3
-status: Draft
+status: Accepted
 last_updated: 2026-04-29
 depends_on: [SPEC-001, SPEC-003]
 ---
