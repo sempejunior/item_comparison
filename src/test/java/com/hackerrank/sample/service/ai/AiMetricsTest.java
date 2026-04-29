@@ -4,10 +4,12 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,7 +50,7 @@ class AiMetricsTest {
                 .tag(AiMetrics.TAG_KIND, AiMetrics.KIND_SUMMARY)
                 .timer();
         assertThat(timer.count()).isEqualTo(1L);
-        assertThat(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)).isCloseTo(150.0, org.assertj.core.data.Offset.offset(5.0));
+        assertThat(timer.totalTime(TimeUnit.MILLISECONDS)).isCloseTo(150.0, Offset.offset(5.0));
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.hackerrank.sample.model.Language;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -64,6 +65,7 @@ public class SummaryService {
 
     private final AtomicBoolean keyInvalidForBoot = new AtomicBoolean(false);
 
+    @Autowired
     public SummaryService(
             PromptLoader promptLoader,
             AiMetrics metrics,

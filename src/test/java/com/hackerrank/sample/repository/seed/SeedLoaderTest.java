@@ -8,6 +8,7 @@ import com.hackerrank.sample.repository.OfferRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
 
@@ -31,7 +32,7 @@ class SeedLoaderTest {
     @Test
     void seedCoversAllCategoriesEvenly() {
         for (Category c : Category.values()) {
-            assertThat(products.findAllByCategory(c, org.springframework.data.domain.PageRequest.of(0, 50))
+            assertThat(products.findAllByCategory(c, PageRequest.of(0, 50))
                     .getTotalElements())
                     .as("category %s", c)
                     .isEqualTo(10L);

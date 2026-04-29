@@ -1,5 +1,6 @@
 package com.hackerrank.sample.service.ai;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,7 @@ public class DailyBudget {
     private final AtomicLong currentDay;
     private final AtomicLong consumed = new AtomicLong(0);
 
+    @Autowired
     public DailyBudget(@Value("${app.ai.daily-request-limit:0}") long limit) {
         this(limit, Clock.systemDefaultZone());
     }
