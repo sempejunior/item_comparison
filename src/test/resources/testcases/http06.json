@@ -1,0 +1,1 @@
+{"request":{"method":"GET","url":"/api/v1/products/compare?ids=1,2&fields=name,buyBox.price","headers":{"Content-Type":"application/json"},"body":{}},"response":{"status_code":200,"headers":{"Content-Type":"application/json"},"body":{"language":"pt-BR","fields":["name","buyBox.price"],"items":[{"id":1,"name":"Galaxy S24"},{"id":2,"name":"Galaxy S24+"}]}}}

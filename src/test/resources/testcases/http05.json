@@ -1,0 +1,1 @@
+{"request":{"method":"GET","url":"/api/v1/products/compare?ids=1,999999","headers":{"Content-Type":"application/json"},"body":{}},"response":{"status_code":404,"headers":{"Content-Type":"application/json"},"body":{"type":"https://api.example.com/errors/products-not-found","status":404,"missingIds":[999999]}}}

@@ -1,3 +1,8 @@
 http00.json: List products with paginated response
 http01.json: Get product by id
 http02.json: Get product by id returns RFC 7807 not found
+http03.json: Compare two products happy path
+http04.json: Compare with single id returns RFC 7807 validation error
+http05.json: Compare with non-existent id returns RFC 7807 products-not-found
+http06.json: Compare with sparse fields projection
+http07.json: Compare cross-category exposes flag and exclusive attributes

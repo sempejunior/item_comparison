@@ -1,5 +1,6 @@
 package com.hackerrank.sample.model;
 
+import com.hackerrank.sample.exception.InvalidLanguageException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,13 +30,13 @@ class LanguageTest {
     @Test
     void fromTag_rejectsUnknownTag() {
         assertThatThrownBy(() -> Language.fromTag("fr-FR"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidLanguageException.class)
                 .hasMessageContaining("fr-FR");
     }
 
     @Test
     void fromTag_rejectsNull() {
         assertThatThrownBy(() -> Language.fromTag(null))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidLanguageException.class);
     }
 }

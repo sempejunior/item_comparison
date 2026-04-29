@@ -1,0 +1,1 @@
+{"request":{"method":"GET","url":"/api/v1/products/compare?ids=1,21","headers":{"Content-Type":"application/json"},"body":{}},"response":{"status_code":200,"headers":{"Content-Type":"application/json"},"body":{"language":"pt-BR","crossCategory":true,"exclusiveAttributes":{"1":["os","size"],"21":["cpu"]}}}}
