@@ -1,7 +1,7 @@
 ---
 id: SPEC-002
 title: Catalog Product Domain Model
-version: v5
+version: v6
 status: Draft
 last_updated: 2026-04-29
 depends_on: [SPEC-001]
@@ -229,9 +229,15 @@ winner. Multi-currency comparison with FX is a roadmap item (R-8).
 - **Mapping:** Spring Data JPA entities in the `repository` package. A
   JPA `AttributeConverter<Map<String,Object>, String>` (Jackson-backed)
   serializes the map.
-- **Seed:** `src/main/resources/seed/catalog.json` is read on startup by
-  a `CommandLineRunner` that inserts both catalog products and their
-  offers. Re-running on every boot is safe because storage is in-memory.
+- **Seed:** a Java factory under `repository.seed.SeedLoader.SeedFactory`
+  emits the dataset programmatically and a `CommandLineRunner` inserts
+  both catalog products and their offers on startup. Re-running on every
+  boot is safe because storage is in-memory. (v1 chose the Java factory
+  over an external `seed/catalog.json` for two reasons: deterministic,
+  reviewable in-tree generation of the 50-product / ~150-offer fixture
+  with edge cases woven in by index, and zero classpath I/O at boot. The
+  shape is identical to what a JSON loader would produce; switching back
+  to JSON is a non-breaking refactor if needed later.)
 
 ## 6. Validation strategy
 
@@ -269,6 +275,12 @@ entry; roadmap R-8 covers FX).*
 
 ## 9. Changelog
 
+- **v6 (2026-04-29)** — §5 Seed mechanism flipped from
+  `src/main/resources/seed/catalog.json` to a Java factory under
+  `repository.seed.SeedLoader.SeedFactory` emitting the same dataset
+  shape (50 products / ~150 offers, edge cases woven by index).
+  Rationale captured in §5; resolves Q-A from the slice 1 mid-flight
+  handoff.
 - **v5 (2026-04-29)** — `Category` enum updated to {SMARTPHONE,
   SMART_TV, NOTEBOOK, HEADPHONES, REFRIGERATOR}, aligned with the seed
   scope decided this session (5 categories × 10 products). §4 sample
