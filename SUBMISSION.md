@@ -60,7 +60,7 @@ nesse layout — é uma restrição do desafio.
 
 | Arquivo                                     | Local | Status   | Nota                                                  |
 |---------------------------------------------|-------|----------|-------------------------------------------------------|
-| `pom.xml`                                   | sim   | partial  | Boot 3.3.5 + Java 21 OK. Faltam: Spring AI, Caffeine, springdoc, jpa, h2, validation, jacoco. Atualizado nas tasks. |
+| `pom.xml`                                   | sim   | ready    | T-01 fechado (2026-04-29): Boot 3.3.5, Java 21, JPA, H2, Caffeine, validation, **aop**, Spring AI 1.0.0-M3 (BOM), springdoc 2.6.0, JaCoCo plugin (gate ativado em T-10). |
 | `src/main/resources/application.yml`        | sim   | partial  | H2 + Caffeine + Actuator + Swagger base. Vai ganhar `app.ai.*`. |
 | `.env.example`                              | sim   | ready    | Documenta `OPENAI_API_KEY`.                           |
 | `.gitignore`                                | sim   | ready    | Inclui `.env`, secrets, build outputs.                |

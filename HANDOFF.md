@@ -251,7 +251,7 @@ Regra:
 3. Pergunta em aberto fica registrada no formato
    `**Q-X (aberta):** texto da pergunta`.
 
-## 9.2 Estado atual da sessão (atualizado 2026-04-29 — fim da rodada de docs)
+## 9.2 Estado atual da sessão (atualizado 2026-04-29 — T-01 fechado)
 
 **Decisões aprovadas pelo usuário (Q1–Q6) — todas materializadas:**
 - Q1: skeleton do HackerRank mantido (`com.hackerrank.sample`).
@@ -265,44 +265,64 @@ Regra:
 - Q6: paginação 0/20/100, rating `{average, count}`, BRL no seed,
   sem FX em v1.
 
-**Já materializado nesta rodada (docs):**
-- Java sources revertidos para `com.hackerrank.sample` (Application,
+**Decisão operacional aprovada (2026-04-29) — canal de submissão:**
+- O HackerRank agora suporta uma sessão Claude Code rodando dentro
+  do ambiente. O modelo de trabalho é **local primário, GitHub
+  bridge, HackerRank staging**: implementação acontece neste repo
+  local; commits vão para `git@github.com:sempejunior/item_comparison.git`
+  (branch `main`); o Claude Code dentro do HackerRank puxa do
+  GitHub e valida (`mvn verify`, smoke). Submissão paste-by-paste
+  preservada como fallback (ADR-0003 não muda — `SUBMISSION.md
+  §2.3` continua válido como ordem de cópia caso o canal sync
+  falhe). Decisão é puramente de canal — não altera contrato,
+  escopo, nem skeleton de pacotes.
+
+**Já materializado nas rodadas anteriores (docs):**
+- ADRs 0001 (Accepted, revivido), 0002 (Superseded by 0003), 0003
+  (paste-friendly + skeleton), 0004 (BuyBox heuristic).
+- SPEC-001 v5, SPEC-002 v5, SPEC-003 v2, SPEC-004 v3.
+- PLAN v2, TASKS.md v1, SUBMISSION.md v2.
+- Java sources iniciais em `com.hackerrank.sample` (Application,
   Category, Condition, AttributesJsonConverter).
-- `application.yml` log package atualizado.
-- `pom.xml` coordenadas revertidas (`com.hackerrank` / `sample`).
-- **ADR-0001** → `Accepted` (revivido).
-- **ADR-0002** → `Superseded by ADR-0003`.
-- **ADR-0003** — Keep skeleton + paste-friendly submission.
-- **ADR-0004** — BuyBox heuristic (Q4 formalizada).
-- **SPEC-001 v5** — C-3 alinhado com ADR-0003; Changelog.
-- **SPEC-002 v5** — Category enum + §4 SMART_TV sample + §7 row +
-  §3.3 buyBox via ADR-0004; Changelog.
-- **SPEC-004 v3** — modelo `gpt-5.4-nano`; Changelog.
-- **PLAN v2** — §0/§2/§12 alinhados com ADR-0003 e ADR-0004; §3
-  seed 50/150; Changelog.
-- **TASKS.md v1** — atomização T-01..T-23, mapa para FR/AC/spec
-  sections, paste-by-paste order alinhado com SUBMISSION §2.3.
-- **SUBMISSION.md v2** — §2.1 atualizado (versões corretas + ADRs
-  + TASKS); §2.3 reescrita (DTOs em `model/`, entidades em
-  `repository/`, sub-pacotes `service/compare/` e `service/ai/`,
-  `controller/advice/`); §2.4/§2.5 renumerada e mapeada para tasks;
-  §3 com a nova numeração; Changelog v2.
+- `application.yml` baseline; `pom.xml` baseline (Boot 3.3.5, sem
+  javafx/unitils/junit-vintage, sem parent duplicado).
+
+**Já materializado nesta rodada (T-01 + bridge GitHub):**
+- `pom.xml` recebeu `spring-boot-starter-aop` (única lacuna real
+  do T-01 — o resto da limpeza já estava na baseline). JaCoCo
+  coverage gate (80% line) **adiada para T-10** por consenso —
+  pacotes `controller/service/repository` ainda vazios; gate ativo
+  agora produziria falsos negativos nas tasks T-02..T-09. TASKS §0
+  já documenta isso; vamos virar a chave junto com `ProductService`
+  em T-10.
+- `git init -b main` no diretório do projeto, remote `origin`
+  apontando para `git@github.com:sempejunior/item_comparison.git`.
+- Dois commits no `main` e push:
+  1. `chore: bootstrap project (specs, ADRs, plan, tasks, scaffolding)`
+  2. `build(pom): T-01 finalize dependencies` (delta = 1 linha
+     adicionando aop).
+- `mvn -DskipTests package` verde; `mvn dependency:tree` confirma
+  `spring-boot-starter-aop:3.3.5` e zero de javafx/unitils/vintage.
+- `SUBMISSION.md §2.2`: linha do `pom.xml` flipada para `ready`.
 
 **Pendente (próxima rodada — implementação):**
-- T-01: pom.xml cleanup + Boot 3.3.5 + deps (Spring AI, validation,
-  AOP, jacoco gate). Primeira porta de entrada do código real.
 - T-02..T-23: seguir `docs/TASKS.md` na ordem; cada task fecha com
-  `mvn verify` verde e atualização de status em SUBMISSION §2.3.
+  `mvn verify` verde, atualização de status em `SUBMISSION.md §2.3`,
+  e um commit dedicado no `main` (push após validação local).
 
 **Q em aberto:** nenhuma.
 
-**Próxima ação concreta na sessão seguinte:** abrir T-01 — limpar
-`pom.xml` (drop javafx-controls, unitils-core, junit-vintage-engine,
-parent duplicado), bumpar Boot para 3.3.5, adicionar Spring AI
-1.0.0-M3 + validation + aop + jacoco com threshold 80% nos pacotes
-`controller`/`service`/`repository`. Validar com `mvn dependency:tree`
-e `mvn -DskipTests package`. Marcar T-01 como `completed` em
-`TaskList` e flipar `pom.xml` em SUBMISSION §2.2 para `ready`.
+**Próxima ação concreta na sessão seguinte:** abrir **T-02** —
+finalizar `src/main/resources/application.yml` conforme TASKS §T-02:
+adicionar `spring.cache.cache-names: products, ai-summary` com specs
+Caffeine por cache (sizes + TTL conforme PLAN §5); `spring.ai.openai.*`
+(api-key placeholder, modelo `gpt-5.4-nano`, temperature 0.2);
+`app.ai.timeout-ms=2000`, `app.ai.daily-request-limit=0`;
+`app.errors.base-uri`; expor `health,info,metrics,caches` no
+actuator; `springdoc.swagger-ui.path: /swagger-ui.html`. DoD: app
+boota com `mvn spring-boot:run` (sem controllers ainda — sem
+exceções), `/actuator/health` = `UP`, com e sem `OPENAI_API_KEY`
+exportado. Commit: `config(yaml): T-02 finalize application.yml`.
 
 ## 10. Protocolo de retomada (genérico, vale para qualquer fase do SDD)
 
