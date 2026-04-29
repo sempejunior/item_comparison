@@ -116,6 +116,26 @@ class CompareServiceTest {
     }
 
     @Test
+    void negativeId_throwsInvalid() {
+        ProductService ps = mock(ProductService.class);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
+
+        assertThatThrownBy(() -> svc.compare(List.of(1L, -2L), null, Language.PT_BR))
+                .isInstanceOf(InvalidCompareRequestException.class)
+                .hasMessageContaining("positive");
+    }
+
+    @Test
+    void zeroId_throwsInvalid() {
+        ProductService ps = mock(ProductService.class);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
+
+        assertThatThrownBy(() -> svc.compare(List.of(1L, 0L), null, Language.PT_BR))
+                .isInstanceOf(InvalidCompareRequestException.class)
+                .hasMessageContaining("positive");
+    }
+
+    @Test
     void elevenIds_throwsInvalid() {
         ProductService ps = mock(ProductService.class);
         CompareService svc = new CompareService(ps, NO_OP_SUMMARY);

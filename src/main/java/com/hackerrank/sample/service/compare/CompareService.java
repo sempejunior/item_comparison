@@ -40,6 +40,9 @@ public class CompareService {
         if (ids.stream().anyMatch(id -> id == null)) {
             throw new InvalidCompareRequestException("ids must not contain blank or null values");
         }
+        if (ids.stream().anyMatch(id -> id <= 0)) {
+            throw new InvalidCompareRequestException("ids must be positive");
+        }
         Set<Long> uniqueIds = new LinkedHashSet<>(ids);
         if (uniqueIds.size() != ids.size()) {
             throw new InvalidCompareRequestException("ids must not contain duplicate values");

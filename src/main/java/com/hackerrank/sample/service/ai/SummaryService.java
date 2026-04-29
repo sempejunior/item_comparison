@@ -115,7 +115,6 @@ public class SummaryService {
             String cached = cache.get(key, String.class);
             if (cached != null) {
                 metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_CACHE_HIT);
-                metrics.recordFallback(AiMetrics.REASON_CACHE_HIT);
                 return Optional.of(cached);
             }
         }

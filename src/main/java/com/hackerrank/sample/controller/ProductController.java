@@ -1,10 +1,13 @@
 package com.hackerrank.sample.controller;
 
 import com.hackerrank.sample.model.Category;
+import com.hackerrank.sample.model.CompareItem;
 import com.hackerrank.sample.model.PageResponse;
 import com.hackerrank.sample.model.ProductDetail;
 import com.hackerrank.sample.model.ProductSummary;
 import com.hackerrank.sample.service.ProductService;
+import com.hackerrank.sample.service.compare.FieldSet;
+import com.hackerrank.sample.service.compare.FieldSetProjector;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.data.domain.PageRequest;
@@ -39,7 +42,15 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
-    public ProductDetail getById(@PathVariable long id) {
-        return productService.getById(id);
+    public Object getById(
+            @PathVariable long id,
+            @RequestParam(name = "fields", required = false) String fieldsCsv) {
+        ProductDetail detail = productService.getById(id);
+        if (fieldsCsv == null || fieldsCsv.isBlank()) {
+            return detail;
+        }
+        FieldSet fields = FieldSetProjector.parse(fieldsCsv);
+        CompareItem projected = FieldSetProjector.project(detail, fields);
+        return projected;
     }
 }

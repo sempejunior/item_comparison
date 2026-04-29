@@ -161,6 +161,7 @@ class SummaryServiceTest {
         verify(chatModel, times(1)).call(any(Prompt.class));
         assertThat(counterCount("ai_calls_total", "outcome", "cache_hit")).isEqualTo(1.0);
         assertThat(counterCount("ai_calls_total", "outcome", "ok")).isEqualTo(1.0);
+        assertThat(counterCount("ai_fallback_total", "reason", "cache_hit")).isEqualTo(0.0);
     }
 
     @Test

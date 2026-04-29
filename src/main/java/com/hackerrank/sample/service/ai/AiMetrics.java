@@ -46,7 +46,6 @@ public class AiMetrics {
     public static final String REASON_CLIENT_ERROR = "client_error";
     public static final String REASON_SERVER_ERROR = "server_error";
     public static final String REASON_EXCEPTION = "exception";
-    public static final String REASON_CACHE_HIT = "cache_hit";
 
     private final MeterRegistry registry;
 
