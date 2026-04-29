@@ -1,0 +1,1 @@
+{"request":{"method":"GET","url":"/api/v1/products/999999","headers":{"Content-Type":"application/json"},"body":{}},"response":{"status_code":404,"headers":{"Content-Type":"application/json"},"body":{"status":404,"title":"Product not found"}}}
