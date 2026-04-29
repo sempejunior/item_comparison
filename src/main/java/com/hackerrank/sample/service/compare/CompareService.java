@@ -9,12 +9,14 @@ import com.hackerrank.sample.model.CompareResponse;
 import com.hackerrank.sample.model.Language;
 import com.hackerrank.sample.model.ProductDetail;
 import com.hackerrank.sample.service.ProductService;
+import com.hackerrank.sample.service.ai.SummaryService;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -24,9 +26,11 @@ public class CompareService {
     private static final int MAX_IDS = 10;
 
     private final ProductService productService;
+    private final SummaryService summaryService;
 
-    public CompareService(ProductService productService) {
+    public CompareService(ProductService productService, SummaryService summaryService) {
         this.productService = productService;
+        this.summaryService = summaryService;
     }
 
     public CompareResponse compare(List<Long> ids, String fieldsCsv, Language language) {
@@ -47,6 +51,7 @@ public class CompareService {
         DifferencesCalculator.DiffResult diff = DifferencesCalculator.compute(products, fields);
         boolean crossCategory = isCrossCategory(products);
         Map<Long, List<String>> exclusives = diff.exclusiveAttributes().isEmpty() ? null : diff.exclusiveAttributes();
+        Optional<String> summary = summaryService.summarise(items, diff.differences(), language);
         return new CompareResponse(
                 fields.explicit() ? fields.rawPaths() : null,
                 language.tag(),
@@ -54,7 +59,7 @@ public class CompareService {
                 items,
                 diff.differences(),
                 exclusives,
-                null);
+                summary.orElse(null));
     }
 
     private static boolean isCrossCategory(List<ProductDetail> products) {
