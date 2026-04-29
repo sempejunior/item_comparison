@@ -14,6 +14,7 @@ import com.hackerrank.sample.service.ai.SummaryService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -85,18 +86,29 @@ class CompareServiceTest {
     }
 
     @Test
-    void duplicateIdsAreDeduped_orderPreserved() {
+    void nullIdInList_throwsInvalid() {
         ProductService ps = mock(ProductService.class);
-        when(ps.getById(eq(1L))).thenReturn(product(1L, new BigDecimal("4000")));
-        when(ps.getById(eq(2L))).thenReturn(product(2L, new BigDecimal("5000")));
         CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
-
-        CompareResponse out = svc.compare(List.of(1L, 2L, 1L), null, Language.PT_BR);
-        assertThat(out.items()).extracting(i -> i.id()).containsExactly(1L, 2L);
+        List<Long> ids = new ArrayList<>();
+        ids.add(1L);
+        ids.add(null);
+        assertThatThrownBy(() -> svc.compare(ids, null, Language.PT_BR))
+                .isInstanceOf(InvalidCompareRequestException.class)
+                .hasMessageContaining("blank or null");
     }
 
     @Test
-    void singleId_after_dedup_throwsInvalid() {
+    void duplicateIds_throwsInvalid() {
+        ProductService ps = mock(ProductService.class);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
+
+        assertThatThrownBy(() -> svc.compare(List.of(1L, 2L, 1L), null, Language.PT_BR))
+                .isInstanceOf(InvalidCompareRequestException.class)
+                .hasMessageContaining("duplicate");
+    }
+
+    @Test
+    void duplicatedSingleId_throwsInvalid() {
         ProductService ps = mock(ProductService.class);
         CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
         assertThatThrownBy(() -> svc.compare(List.of(1L, 1L), null, Language.PT_BR))

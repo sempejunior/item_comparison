@@ -1,7 +1,7 @@
 ---
 id: SPEC-003
 title: API Contract
-version: v3
+version: v4
 status: Draft
 last_updated: 2026-04-29
 depends_on: [SPEC-001, SPEC-002]
@@ -273,6 +273,9 @@ unsupported `language`, etc.
   a book).
 - `id` is implicitly included.
 - Inclusion-only; there is no exclusion syntax in v1.
+- `rating` is serialized as a scalar JSON number (`Double`) in
+  `[0.0, 5.0]`, never as an object. See SPEC-001 FR-5a and SPEC-002 §4
+  INV-3 for the rationale (no `count` field in v1).
 
 ## 4. Error model (RFC 7807)
 
@@ -364,6 +367,11 @@ curl -s 'http://localhost:8080/api/v1/products/compare?ids=1,21'
 
 ## 9. Changelog
 
+- **v4 (2026-04-29)** — Aligned with SPEC-001 v7: §3 now explicitly
+  documents `rating` as a scalar JSON number (`Double`) in `[0.0, 5.0]`,
+  closing the only ambiguity left between the contract and the
+  implementation. No endpoint shape changed; example payloads were
+  already scalar.
 - **v3 (2026-04-29)** — Aligned with SPEC-001 v6: compare response now
   documents `crossCategory: boolean` and an optional
   `exclusiveAttributes: { [productId]: string[] }` map. Added a

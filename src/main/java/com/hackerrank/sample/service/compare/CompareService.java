@@ -37,11 +37,18 @@ public class CompareService {
         if (ids == null || ids.isEmpty()) {
             throw new InvalidCompareRequestException("ids parameter is required");
         }
-        List<Long> deduped = new ArrayList<>(new LinkedHashSet<>(ids));
-        if (deduped.size() < MIN_IDS || deduped.size() > MAX_IDS) {
-            throw new InvalidCompareRequestException(
-                    "ids must contain between " + MIN_IDS + " and " + MAX_IDS + " unique values (got " + deduped.size() + ")");
+        if (ids.stream().anyMatch(id -> id == null)) {
+            throw new InvalidCompareRequestException("ids must not contain blank or null values");
         }
+        Set<Long> uniqueIds = new LinkedHashSet<>(ids);
+        if (uniqueIds.size() != ids.size()) {
+            throw new InvalidCompareRequestException("ids must not contain duplicate values");
+        }
+        if (uniqueIds.size() < MIN_IDS || uniqueIds.size() > MAX_IDS) {
+            throw new InvalidCompareRequestException(
+                    "ids must contain between " + MIN_IDS + " and " + MAX_IDS + " unique values (got " + uniqueIds.size() + ")");
+        }
+        List<Long> deduped = new ArrayList<>(uniqueIds);
         FieldSet fields = FieldSetProjector.parse(fieldsCsv);
         List<ProductDetail> products = resolve(deduped);
         List<CompareItem> items = new ArrayList<>(products.size());

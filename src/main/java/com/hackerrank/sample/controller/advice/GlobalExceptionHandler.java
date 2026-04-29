@@ -9,7 +9,11 @@ import com.hackerrank.sample.model.problem.ProblemDetail7807;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.ConversionNotSupportedException;
+import org.springframework.core.convert.ConversionFailedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -25,6 +29,8 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     private final String errorsBaseUri;
 
@@ -123,8 +129,40 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail7807> handleFallback(
             Exception ex, HttpServletRequest request) {
+        if (isParameterConversionFailure(ex)) {
+            String parameter = guessParameterName(request);
+            String detail = "parameter '" + parameter + "' has invalid value";
+            return problem("bad-request", "Malformed parameter", HttpStatus.BAD_REQUEST,
+                    detail, request, null, null);
+        }
+        LOG.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
         return problem("internal", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR,
                 "Unexpected error", request, null, null);
+    }
+
+    private static boolean isParameterConversionFailure(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof ConversionFailedException
+                    || current instanceof ConversionNotSupportedException
+                    || current instanceof NumberFormatException) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static String guessParameterName(HttpServletRequest request) {
+        String query = request.getQueryString();
+        if (query == null || query.isBlank()) {
+            return "request";
+        }
+        int eq = query.indexOf('=');
+        return eq > 0 ? query.substring(0, eq) : "request";
     }
 
     private ResponseEntity<ProblemDetail7807> problem(
