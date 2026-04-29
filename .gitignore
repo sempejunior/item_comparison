@@ -17,4 +17,10 @@ HELP.md
 *.key
 secrets/
 
+# session-only working files (not part of the deliverable)
+HANDOFF.md
+SUBMISSION.md
+notes/
+*.session.md
+
 !.mvn/wrapper/maven-wrapper.jar

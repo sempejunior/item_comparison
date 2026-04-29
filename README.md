@@ -5,9 +5,10 @@ desafio *Item Comparison V2* do Mercado Livre. Este repositório está em
 construção ativa; o que está presente reflete a **fase de especificação**
 do projeto, antes da implementação propriamente dita.
 
-> Status atual: **specs aprovadas, implementação pendente.** Veja
-> [`SUBMISSION.md`](./SUBMISSION.md) para o manifesto vivo de quais
-> arquivos compõem a entrega e seu estado individual.
+> Status atual: **specs aprovadas, implementação em andamento.** O
+> trilho de tasks atômicas está em
+> [`docs/TASKS.md`](./docs/TASKS.md); o histórico de commits no `main`
+> reflete o progresso real.
 
 ## Visão geral
 
@@ -120,7 +121,6 @@ documentado no contrato.
 ```
 .
 ├── README.md                    este arquivo
-├── SUBMISSION.md                manifesto vivo de arquivos a entregar
 ├── pom.xml                      Spring Boot 3.3.5, Java 21
 ├── docs/
 │   ├── README.md                metodologia SDD
