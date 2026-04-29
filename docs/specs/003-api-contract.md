@@ -1,9 +1,9 @@
 ---
 id: SPEC-003
 title: API Contract
-version: v2
+version: v3
 status: Draft
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 depends_on: [SPEC-001, SPEC-002]
 ---
 
@@ -96,8 +96,11 @@ GET /api/v1/products/compare?ids={csv}&fields={csv}&language={lang}
 | `language` | string | `pt-BR` | one of `pt-BR`, `en`. Drives the `summary` language.   |
 
 **200 OK** — products in the order supplied (after dedup), each filtered
-if `fields` is given, plus a `differences[]` array and (when the LLM is
-configured and reachable) a `summary` string.
+if `fields` is given, plus a `crossCategory` boolean, a `differences[]`
+array, an optional `exclusiveAttributes` map, and (when the LLM is
+configured and reachable) a `summary` string. See SPEC-001 §5.2 FR-7a/FR-7b
+for the intersection semantics that drive `differences[]` and
+`exclusiveAttributes`.
 
 ```bash
 curl -s 'http://localhost:8080/api/v1/products/compare?ids=1,2'
@@ -106,6 +109,7 @@ curl -s 'http://localhost:8080/api/v1/products/compare?ids=1,2'
 {
   "fields": null,
   "language": "pt-BR",
+  "crossCategory": false,
   "items": [
     { "id": 1, "name": "Galaxy S24", "category": "SMARTPHONE",
       "buyBox": { "price": 4899.00, "currency": "BRL" },
@@ -147,6 +151,17 @@ Notes on shape:
   attributes default to `isComparable: false`.
 - `summary` is omitted entirely when the LLM is not configured, times
   out, or fails. The consumer must treat it as optional.
+- `crossCategory` is `true` when the compared items do not all share
+  the same `category`. Frontends should display a caveat next to
+  cross-category winners (e.g. "comparing RAM across phone and laptop
+  is not strictly equivalent").
+- `exclusiveAttributes` is an object keyed by product id, listing the
+  attribute keys each product carries that were dropped from the
+  intersection used to build `differences[]`. The field is omitted
+  entirely when all compared products share the same attribute keys.
+  Sparse `fields` selections (e.g. `attributes.battery`) bypass the
+  intersection for the included paths but do not change
+  `exclusiveAttributes`.
 
 ```bash
 curl -s 'http://localhost:8080/api/v1/products/compare?ids=1,2&fields=name,buyBox.price&language=en'
@@ -176,6 +191,59 @@ curl -s 'http://localhost:8080/api/v1/products/compare?ids=1,2&fields=offers'
 Returns each item with the full `offers` list instead of `buyBox`. The
 diff still operates on `buyBox` for the price entry; per-offer diffs
 are out of scope (see SPEC-002 §8 Q-1, roadmap).
+
+#### Cross-category example
+
+```bash
+curl -s 'http://localhost:8080/api/v1/products/compare?ids=1,21'
+```
+```json
+{
+  "fields": null,
+  "language": "pt-BR",
+  "crossCategory": true,
+  "items": [
+    { "id": 1, "name": "Galaxy S24", "category": "SMARTPHONE",
+      "buyBox": { "price": 4899.00, "currency": "BRL" },
+      "attributes": { "battery": "4000 mAh", "memory": "8 GB",
+                       "storage": "256 GB", "brand": "Samsung",
+                       "os": "Android 14" } },
+    { "id": 21, "name": "ThinkPad X1", "category": "NOTEBOOK",
+      "buyBox": { "price": 12499.00, "currency": "BRL" },
+      "attributes": { "memory": "16 GB", "storage": "1 TB",
+                       "brand": "Lenovo", "cpu": "Core i7-1365U" } }
+  ],
+  "differences": [
+    { "path": "buyBox.price", "isComparable": true, "winnerId": 1,
+      "values": { "1": 4899.00, "21": 12499.00 } },
+    { "path": "attributes.memory", "isComparable": true, "winnerId": 21,
+      "values": { "1": "8 GB", "21": "16 GB" } },
+    { "path": "attributes.storage", "isComparable": true, "winnerId": 21,
+      "values": { "1": "256 GB", "21": "1 TB" } },
+    { "path": "attributes.brand", "isComparable": false, "winnerId": null,
+      "values": { "1": "Samsung", "21": "Lenovo" } }
+  ],
+  "exclusiveAttributes": {
+    "1":  ["battery", "os"],
+    "21": ["cpu"]
+  }
+}
+```
+
+Note how `attributes.battery` is **not** in `differences[]` — it exists
+only on the smartphone, so it is dropped from the intersection and
+listed under `exclusiveAttributes["1"]`. Likewise `cpu` exists only on
+the notebook. To force a comparison anyway, the client opts in via
+`fields`:
+
+```bash
+curl -s 'http://localhost:8080/api/v1/products/compare?ids=1,21&fields=name,attributes.battery'
+```
+
+The `attributes.battery` path is then included in `differences[]` with
+`values: { "1": "4000 mAh", "21": null }` and `isComparable: false`.
+`exclusiveAttributes` is unchanged because it reflects the intersection
+logic, not the sparse selection.
 
 **404** — at least one id is unknown. No partial result.
 ```json
@@ -277,6 +345,9 @@ curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,99'
 
 # compare, error: too many ids
 curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,2,3,4,5,6,7,8,9,10,11'
+
+# compare, cross-category (smartphone + notebook)
+curl -s 'http://localhost:8080/api/v1/products/compare?ids=1,21'
 ```
 
 ## 8. Open questions
@@ -293,6 +364,13 @@ curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,2,3,4,5,6,7,8,9,10,
 
 ## 9. Changelog
 
+- **v3 (2026-04-29)** — Aligned with SPEC-001 v6: compare response now
+  documents `crossCategory: boolean` and an optional
+  `exclusiveAttributes: { [productId]: string[] }` map. Added a
+  cross-category curl example and a sparse-override note. The diff
+  scope (intersection vs. user-pinned `fields`) is described in §2.3
+  with cross-references to SPEC-001 FR-7a/FR-7b. No endpoint shape
+  removed; only additions.
 - **v2 (2026-04-28)** — Aligned with SPEC-001 v3 and SPEC-002 v3:
   removed `/search` mention (none in v1; deferred to roadmap R-2/R-3);
   compare endpoint now documents `differences[]` (Option A — only

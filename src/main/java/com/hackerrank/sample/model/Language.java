@@ -1,15 +1,16 @@
 package com.hackerrank.sample.model;
 
+import com.hackerrank.sample.exception.InvalidLanguageException;
+
 import java.util.Locale;
 
 /**
  * Language tag accepted by the compare endpoint summary feature.
  *
- * The wire format follows BCP 47 short tags: {@code pt-BR} and {@code en}.
- * Internal representation uses underscore (PT_BR) so the enum literals stay
- * Java-legal. Parsing is performed via {@link #fromTag(String)}; unknown
- * tags raise {@link IllegalArgumentException} until T-15 wires the
- * dedicated {@code InvalidLanguageException} into the global advice.
+ * Wire format follows BCP 47 short tags: {@code pt-BR} and {@code en}.
+ * Internal enum literals use underscore (PT_BR) so they stay Java-legal.
+ * Parsing is performed via {@link #fromTag(String)}; unknown or null
+ * tags raise {@link InvalidLanguageException}.
  */
 public enum Language {
     PT_BR("pt-BR"),
@@ -27,7 +28,7 @@ public enum Language {
 
     public static Language fromTag(String raw) {
         if (raw == null) {
-            throw new IllegalArgumentException("language tag must not be null");
+            throw new InvalidLanguageException("language tag must not be null");
         }
         String normalized = raw.trim().toLowerCase(Locale.ROOT);
         for (Language language : values()) {
@@ -35,6 +36,6 @@ public enum Language {
                 return language;
             }
         }
-        throw new IllegalArgumentException("unsupported language tag: " + raw);
+        throw new InvalidLanguageException("unsupported language tag: " + raw);
     }
 }

@@ -45,6 +45,10 @@ public class SeedLoader implements CommandLineRunner {
 
     static final class SeedFactory {
 
+        private static double round2(double value) {
+            return Math.round(value * 100.0) / 100.0;
+        }
+
         static List<CatalogProductEntity> products() {
             List<CatalogProductEntity> all = new java.util.ArrayList<>();
             for (int i = 0; i < 10; i++) {
@@ -101,7 +105,7 @@ public class SeedLoader implements CommandLineRunner {
                     : "Smartphone Model " + idx;
             return new CatalogProductEntity(id, name, "Smartphone " + idx,
                     "https://example.com/img/sp-" + id + ".jpg",
-                    Math.min(5.0, 4.0 + idx * 0.1),
+                    round2(Math.min(5.0, 4.0 + idx * 0.1)),
                     Category.SMARTPHONE, attrs);
         }
 
@@ -116,7 +120,7 @@ public class SeedLoader implements CommandLineRunner {
             return new CatalogProductEntity(id, "Smart TV " + (43 + idx * 3) + "\"",
                     "Smart TV idx " + idx,
                     "https://example.com/img/tv-" + id + ".jpg",
-                    Math.min(5.0, 4.2 + idx * 0.05),
+                    round2(Math.min(5.0, 4.2 + idx * 0.05)),
                     Category.SMART_TV, attrs);
         }
 
@@ -131,7 +135,7 @@ public class SeedLoader implements CommandLineRunner {
             return new CatalogProductEntity(id, "Notebook Model " + idx,
                     "Notebook " + idx,
                     "https://example.com/img/nb-" + id + ".jpg",
-                    Math.min(5.0, 4.1 + idx * 0.05),
+                    round2(Math.min(5.0, 4.1 + idx * 0.05)),
                     Category.NOTEBOOK, attrs);
         }
 
@@ -146,7 +150,7 @@ public class SeedLoader implements CommandLineRunner {
             return new CatalogProductEntity(id, "Headphone Model " + idx,
                     "Headphone " + idx,
                     "https://example.com/img/hp-" + id + ".jpg",
-                    Math.min(5.0, 4.0 + idx * 0.08),
+                    round2(Math.min(5.0, 4.0 + idx * 0.08)),
                     Category.HEADPHONES, attrs);
         }
 
@@ -160,7 +164,7 @@ public class SeedLoader implements CommandLineRunner {
             return new CatalogProductEntity(id, "Refrigerator Model " + idx,
                     "Fridge " + idx,
                     "https://example.com/img/rf-" + id + ".jpg",
-                    Math.min(5.0, 4.0 + idx * 0.07),
+                    round2(Math.min(5.0, 4.0 + idx * 0.07)),
                     Category.REFRIGERATOR, attrs);
         }
     }

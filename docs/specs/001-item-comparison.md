@@ -1,7 +1,7 @@
 ---
 id: SPEC-001
 title: Item Comparison API
-version: v5
+version: v6
 status: Draft
 last_updated: 2026-04-29
 ---
@@ -96,6 +96,26 @@ Serve normalized catalog data so a frontend can:
   and always present**. Rationale for the lean shape: the frontend can
   always reconstruct draws from `items[]`; duplicating them in
   `differences[]` only inflates the payload.
+- **FR-7a — Attribute scope (intersection).** When the request does not
+  pin specific `attributes.*` paths via `fields`, the diff considers the
+  **intersection** of attribute keys present in **all** compared
+  products. Attributes that exist in only some of the items are excluded
+  from `differences[]` and instead surfaced in `exclusiveAttributes` (FR-7b).
+  When the client explicitly asks for an attribute path via `fields`
+  (e.g. `attributes.battery`), the client's choice wins — the attribute
+  is included in `differences[]` even if missing on some items, with
+  `null` values where absent and `isComparable: false`.
+- **FR-7b — Cross-category awareness.** The compare response carries:
+  - `crossCategory: boolean` — `true` when the compared items do not all
+    share the same `category`. The frontend uses this to caution the
+    user that winners across heterogeneous categories may not be
+    semantically equivalent (e.g. RAM in a phone vs. a laptop).
+  - `exclusiveAttributes: { [productId]: string[] }` — for each
+    product, the attribute keys it holds that were not present in
+    every compared product (i.e. dropped from the intersection).
+    Omitted from the response when empty (all items share the same
+    attribute keys). Sparse `fields` selections do not populate this
+    map — it reflects only what the diff intersection left out.
 - **FR-8** — When an LLM is configured and reachable, the comparison
   response carries an additional `summary` field with a natural-language
   comparison overview. The endpoint accepts a `language` query parameter
@@ -206,6 +226,21 @@ overreach.
 - **AC-10** — `mvn spring-boot:run` boots the service in under 10 s on
   developer hardware, with or without `OPENAI_API_KEY`. There is no
   embedding warm-up phase.
+- **AC-11** — Compare across two products of the same category returns
+  `crossCategory: false` and omits `exclusiveAttributes`.
+  `differences[]` contains only attribute keys that actually differ
+  (intersection equals union when categories match the seed).
+- **AC-12** — Compare across products of different categories
+  (e.g. one `SMARTPHONE` and one `NOTEBOOK`) returns
+  `crossCategory: true`, a `differences[]` restricted to the
+  intersection of attribute keys (plus `buyBox.price`, `rating`, etc.
+  that are common at the product level), and an `exclusiveAttributes`
+  map listing the per-product attributes dropped from the intersection.
+- **AC-13** — Compare across different categories with explicit
+  `fields=attributes.battery` includes `attributes.battery` in
+  `differences[]` even if one product lacks it; the missing value is
+  `null` and `isComparable` is `false`. `exclusiveAttributes` reflects
+  the intersection logic, not the sparse selection.
 
 ## 10. Open questions
 
@@ -215,6 +250,13 @@ differentiators in `differences[]`).*
 
 ## 11. Changelog
 
+- **v6 (2026-04-29)** — Cross-category compare semantics formalized.
+  Added FR-7a (attribute intersection scope when `fields` does not pin
+  attribute paths; sparse selection overrides intersection) and FR-7b
+  (`crossCategory` boolean and `exclusiveAttributes` map in the
+  response). Added AC-11/AC-12/AC-13 covering same-category, mixed-
+  category, and sparse-override paths. No FR/AC renumbering of prior
+  items. Drives SPEC-003 v3.
 - **v5 (2026-04-29)** — C-3 reverted: HackerRank skeleton root
   (`com.hackerrank.sample`) kept; Application class name reverted to
   `Application`. Driven by ADR-0003 and the paste-by-paste submission
