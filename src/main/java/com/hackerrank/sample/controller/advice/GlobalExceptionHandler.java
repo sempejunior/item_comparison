@@ -182,7 +182,12 @@ public class GlobalExceptionHandler {
     }
 
     private static ProblemDetail7807.FieldError toFieldError(ConstraintViolation<?> v) {
-        return new ProblemDetail7807.FieldError(v.getPropertyPath().toString(), v.getMessage());
+        return new ProblemDetail7807.FieldError(stripMethodPrefix(v.getPropertyPath().toString()), v.getMessage());
+    }
+
+    private static String stripMethodPrefix(String propertyPath) {
+        int lastDot = propertyPath.lastIndexOf('.');
+        return lastDot >= 0 ? propertyPath.substring(lastDot + 1) : propertyPath;
     }
 
     private static ProblemDetail7807.FieldError toFieldError(FieldError v) {
