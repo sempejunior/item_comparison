@@ -1,0 +1,3 @@
+http00.json: List products with paginated response
+http01.json: Get product by id
+http02.json: Get product by id returns RFC 7807 not found
