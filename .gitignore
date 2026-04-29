@@ -1,0 +1,20 @@
+target/
+.idea/
+.vscode/
+*.iml
+.DS_Store
+.classpath
+.project
+.settings/
+.factorypath
+HELP.md
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+!.mvn/wrapper/maven-wrapper.jar
