@@ -9,6 +9,7 @@ import java.util.Map;
 public record CompareItem(
         Long id,
         String name,
+        String description,
         String imageUrl,
         Double rating,
         Category category,
