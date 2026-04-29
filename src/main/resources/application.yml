@@ -1,9 +1,6 @@
 spring:
   application:
     name: item-comparison-api
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY:disabled}
   datasource:
     url: jdbc:h2:mem:items;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
@@ -22,9 +19,18 @@ spring:
       path: /h2-console
   cache:
     type: caffeine
-    cache-names: products
+    cache-names:
+      - products
+      - ai-summary
     caffeine:
       spec: maximumSize=1000,expireAfterWrite=5m,recordStats
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:disabled}
+      chat:
+        options:
+          model: gpt-5.4-nano
+          temperature: 0.2
 
 server:
   port: 8080
@@ -46,6 +52,13 @@ springdoc:
     path: /swagger-ui.html
   api-docs:
     path: /v3/api-docs
+
+app:
+  ai:
+    timeout-ms: 2000
+    daily-request-limit: 0
+  errors:
+    base-uri: https://api.example.com/errors
 
 logging:
   level:
