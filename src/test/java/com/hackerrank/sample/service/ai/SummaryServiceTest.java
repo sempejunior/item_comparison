@@ -201,6 +201,59 @@ class SummaryServiceTest {
     }
 
     @Test
+    void comparePromptV2IncludesWinsBlockAndBuyingGuideHeader() {
+        when(chatModel.call(any(Prompt.class))).thenAnswer(inv -> {
+            Prompt prompt = inv.getArgument(0);
+            String text = prompt.getInstructions().get(0).getContent();
+            assertThat(text).contains("buying-guide writer");
+            assertThat(text).contains("Per-product winning axes");
+            assertThat(text).contains("\"1\"");
+            assertThat(text).contains("\"2\"");
+            assertThat(text).contains("weight_g: 190");
+            assertThat(text).contains("battery_mah: 5151");
+            return chatResponse("guia", 10L, 5L);
+        });
+        SummaryService service = service(() -> "sk-real");
+
+        Optional<String> result = service.summarise(items(), differences(), Language.PT_BR);
+
+        assertThat(result).contains("guia");
+    }
+
+    @Test
+    void buildWinsGroupsByWinnerIdAndIgnoresNullWinner() {
+        Map<String, List<String>> wins = SummaryService.buildWins(items(), differences());
+
+        assertThat(wins).containsOnlyKeys("1", "2");
+        assertThat(wins.get("1")).containsExactly("weight_g: 190");
+        assertThat(wins.get("2")).containsExactly("battery_mah: 5151");
+    }
+
+    @Test
+    void buildWinsTreatsItemWithoutWinningAxisAsEmptyList() {
+        List<DifferenceEntry> diffs = List.of(
+                new DifferenceEntry("attributes.battery_mah", true, 2L, Map.of(1L, 4500, 2L, 5151))
+        );
+
+        Map<String, List<String>> wins = SummaryService.buildWins(items(), diffs);
+
+        assertThat(wins.get("1")).isEmpty();
+        assertThat(wins.get("2")).containsExactly("battery_mah: 5151");
+    }
+
+    @Test
+    void buildWinsSkipsEntriesWithNullWinnerId() {
+        List<DifferenceEntry> diffs = List.of(
+                new DifferenceEntry("attributes.color", false, null, Map.of(1L, "red", 2L, "blue"))
+        );
+
+        Map<String, List<String>> wins = SummaryService.buildWins(items(), diffs);
+
+        assertThat(wins.get("1")).isEmpty();
+        assertThat(wins.get("2")).isEmpty();
+    }
+
+    @Test
     void categoryInsightsWithPicksRendersV3PromptAndCachesPerVersion() {
         AtomicInteger calls = new AtomicInteger();
         when(chatModel.call(any(Prompt.class))).thenAnswer(inv -> {

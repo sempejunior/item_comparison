@@ -27,6 +27,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.web.client.HttpStatusCodeException;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -57,7 +58,8 @@ public class SummaryService {
 
     static final String CACHE_NAME = "ai-summary";
     static final String CACHE_NAME_INSIGHTS = "ai-category-insights";
-    static final String PROMPT_TEMPLATE = "compare-summary.v1.md";
+    static final String PROMPT_TEMPLATE = "compare-summary.v2.md";
+    static final String PROMPT_VERSION_COMPARE = "v2";
     static final String PROMPT_TEMPLATE_INSIGHTS = "category-insights.v3.md";
     static final String PROMPT_VERSION_INSIGHTS = "v3";
     private static final String DISABLED_KEY = "disabled";
@@ -257,7 +259,40 @@ public class SummaryService {
         bindings.put("language", language.tag());
         bindings.put("products", objectMapper.writeValueAsString(slimItems(items)));
         bindings.put("differences", objectMapper.writeValueAsString(differences));
+        bindings.put("wins", objectMapper.writeValueAsString(buildWins(items, differences)));
         return promptLoader.render(PROMPT_TEMPLATE, bindings);
+    }
+
+    static Map<String, List<String>> buildWins(List<CompareItem> items, List<DifferenceEntry> differences) {
+        Map<String, List<String>> wins = new LinkedHashMap<>();
+        for (CompareItem item : items) {
+            if (item.id() != null) {
+                wins.put(String.valueOf(item.id()), new ArrayList<>());
+            }
+        }
+        for (DifferenceEntry diff : differences) {
+            if (diff.winnerId() == null || diff.values() == null) {
+                continue;
+            }
+            Object value = diff.values().get(diff.winnerId());
+            if (value == null) {
+                continue;
+            }
+            List<String> bucket = wins.get(String.valueOf(diff.winnerId()));
+            if (bucket == null) {
+                continue;
+            }
+            bucket.add(labelOf(diff.path()) + ": " + String.valueOf(value));
+        }
+        return wins;
+    }
+
+    private static String labelOf(String path) {
+        if (path == null || path.isEmpty()) {
+            return "value";
+        }
+        int dot = path.lastIndexOf('.');
+        return dot < 0 ? path : path.substring(dot + 1);
     }
 
     private String renderInsightsPrompt(
@@ -329,7 +364,7 @@ public class SummaryService {
                 .sorted()
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
-        return language.tag() + "|" + ids + "|" + differences.hashCode();
+        return PROMPT_VERSION_COMPARE + "|" + language.tag() + "|" + ids + "|" + differences.hashCode();
     }
 
     private String insightsCacheKey(
