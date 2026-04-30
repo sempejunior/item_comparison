@@ -1,7 +1,7 @@
 ---
 id: SPEC-005
 title: Category Insights
-version: v4
+version: v5
 status: Accepted
 last_updated: 2026-04-30
 depends_on: [SPEC-001, SPEC-002, SPEC-003, SPEC-004]
@@ -82,8 +82,17 @@ normalization (R-8).
   `/compare` is for.
 - **FR-2** — The response always carries:
   - `category` — echoed.
-  - `productCount` — total catalog products in this category at request
-    time.
+  - `productCount` — number of catalog products considered after any
+    structured filters from §5.6 are applied. When no filter is set,
+    this is the full count for the category at request time. The field
+    intentionally reflects the *analyzed slice*, not the underlying
+    category cardinality, so the frontend can show "12 of N products
+    matched your filters" without a second call.
+  - `appliedFilters` — echo of the structured filters that narrowed the
+    slice (`minPrice`, `maxPrice`, `minRating`); present only when at
+    least one filter was supplied. Absent (omitted from JSON) when the
+    request carried no filter — the existing client contract is
+    preserved unchanged for unfiltered calls.
   - `rankings[]` — one entry per ranked attribute (see §5.2).
   - `topItems[]` — `topK` representative items in summary projection
     (same shape as the list endpoint's items: `id`, `name`, `category`,
@@ -208,10 +217,13 @@ normalization (R-8).
   of the picks. The cache key includes the prompt version (`v2|...`)
   so a future v3 prompt invalidates the cache automatically.
 - **FR-10** — Cache key is `(promptVersion, category, topK, language,
-  rankingsHash, topItemsHash, picksHash)`. The cache lives
-  alongside `ai-summary` as a new Caffeine cache `ai-category-insights`
-  with the same `maximum-size` / `ttl-minutes` defaults. Hits are
-  counted as `ai_calls_total{kind=category_insights, outcome=cache_hit}`.
+  rankingsHash, topItemsHash, picksHash, filtersHash)`. `filtersHash`
+  is the deterministic digest of the structured filters from §5.6
+  (empty string when no filter is set, preserving cache hits for
+  unfiltered calls verbatim across slices). The cache lives alongside
+  `ai-summary` as a new Caffeine cache `ai-category-insights` with the
+  same `maximum-size` / `ttl-minutes` defaults. Hits are counted as
+  `ai_calls_total{kind=category_insights, outcome=cache_hit}`.
 - **FR-11** — Fallback policy matches SPEC-004 §6 row-for-row, with the
   same `ai_fallback_total{reason=...}` taxonomy. The deterministic
   `rankings[]` and `topItems[]` are always present; the `summary` is
@@ -229,6 +241,57 @@ normalization (R-8).
   products of that category are in the store, the response is 200 with
   `productCount: 0`, `rankings: []`, `topItems: []`, no `summary`. This
   is not an error condition.
+
+### 5.6 Structured filters (slice 5)
+
+- **FR-16 — Filter parameters.** The endpoint accepts three optional,
+  opt-in query parameters that narrow the slice analyzed by the
+  rankings, picks, top-K and summary stages:
+
+  | Param       | Type        | Range                   | Applied to                       |
+  |-------------|-------------|-------------------------|-----------------------------------|
+  | `minPrice`  | BigDecimal  | `≥ 0`                   | `buyBox.price`                    |
+  | `maxPrice`  | BigDecimal  | `≥ 0`, `≥ minPrice`     | `buyBox.price`                    |
+  | `minRating` | Double      | `[0.0, 5.0]`            | `rating`                          |
+
+  Filters are independent and additive (logical AND). Absent ⇒ no
+  constraint. Products with `buyBox == null` are excluded as soon as
+  *any* price filter is set (they are unreachable by definition); they
+  are still considered when only `minRating` is set, provided the
+  rating is present. Products with `rating == null` are excluded as
+  soon as `minRating` is set.
+
+- **FR-17 — Pipeline placement.** Filters are applied **once**, in the
+  service layer, against the products returned by
+  `productService.getAllByCategory(category)`, *before* `computeRankings`,
+  `pickTopItems` and `computePicks` see the list. There is a single
+  source of truth for the filtered subset — every downstream stage
+  reasons on the same slice. Out-of-scope for v1: pushing the predicate
+  down to the JPA repository — see ADR-0006 for the scale-up trigger
+  and migration path.
+
+- **FR-18 — Prompt context.** When at least one filter is set, the
+  rendered prompt receives an additional `appliedFilters` block listing
+  the supplied bounds in the requested `language`. This keeps the LLM
+  honest about the slice it is summarising — *"smartphones acima de R$
+  3.000 com 4+ estrelas"* must not be summarised as the full category
+  panorama. The block is omitted from the prompt when no filter is set,
+  so cached unfiltered summaries from prior slices remain valid.
+
+- **FR-19 — Empty filtered slice.** When filters reduce the pool to
+  fewer than 2 products, the endpoint still returns 200 with
+  `productCount` reflecting the filtered count (`0` or `1`),
+  `appliedFilters` echoed, `rankings: []`, `topItems` of size `0` or
+  `1`, and **no `summary`** (same gate as FR-3 and FR-15). The
+  frontend renders an empty / under-constrained state with the echoed
+  filter values so the user can broaden them.
+
+- **FR-20 — Validation.** `minPrice < 0`, `maxPrice < 0`,
+  `minPrice > maxPrice`, or `minRating` outside `[0.0, 5.0]` ⇒ 400
+  `validation` (RFC 7807, same advice as FR-13). The cross-field
+  `minPrice ≤ maxPrice` check is enforced by a class-level Bean
+  Validation constraint on the request bean so the error surfaces
+  before the controller body executes.
 
 ## 6. Non-functional requirements
 
@@ -256,7 +319,8 @@ normalization (R-8).
 | Item                                                      | Where           |
 |-----------------------------------------------------------|-----------------|
 | Cross-category insights (`?category=X,Y`)                 | not planned     |
-| Faceted filtering (price range, brand, condition) inside the insight | roadmap (R-9 candidate) |
+| Faceted filtering by `condition` / `brand` / per-attribute ranges     | roadmap R-10 (post-v5)  |
+| Push-down of `minPrice` / `maxPrice` / `minRating` to JPA repository  | roadmap R-11 (scale-up) |
 | Personalized ranking weights per user                     | roadmap R-4     |
 | Per-offer rankings (which seller wins on price)           | not planned     |
 | Multi-currency normalization                              | roadmap R-8     |
@@ -306,6 +370,21 @@ normalization (R-8).
   `ai_calls_total{kind=category_insights, outcome=cache_hit}`; first
   call counted as `outcome=ok`. `ai_fallback_total{reason=cache_hit}`
   is **not** incremented (preserves the OBS-5 fix from Slice 3).
+- **AC-13** — `?category=SMARTPHONE&minRating=4.5` narrows the slice:
+  `productCount` reflects only products with `rating ≥ 4.5`,
+  `appliedFilters.minRating == 4.5`, every `topItems[].rating ≥ 4.5`,
+  and the rendered `summary` (when LLM available) opens by acknowledging
+  the filter.
+- **AC-14** — `?category=SMART_TV&minPrice=2000&maxPrice=4000` narrows
+  to products whose `buyBox.price` is in `[2000, 4000]`, products
+  without `buyBox` are excluded, `appliedFilters` echoes both bounds,
+  and `summary` describes the filtered slice (not the full category).
+- **AC-15** — `?category=SMARTPHONE&minPrice=-1` → 400 `validation`;
+  `?category=SMARTPHONE&minPrice=3000&maxPrice=2000` → 400 `validation`
+  with the cross-field constraint message; `?category=SMARTPHONE&minRating=6`
+  → 400 `validation`. Unfiltered calls keep the v4 contract verbatim
+  (no `appliedFilters` field in the JSON body, same cache key, same
+  `productCount` semantics).
 
 ## 10. Open questions
 
@@ -317,6 +396,20 @@ on `topItems` in v1 — projection is already lean).*
 
 ## 11. Changelog
 
+- **v5 (2026-04-30)** — Added §5.6 (Structured filters: `minPrice`,
+  `maxPrice`, `minRating`) — opt-in query parameters that narrow the
+  analyzed slice before rankings, picks, top-K and summary are
+  computed. New response field `appliedFilters` (present only when at
+  least one filter is set) so the unfiltered v4 wire contract is
+  preserved verbatim. `productCount` now reflects the filtered subset
+  (FR-2 wording sharpened to spell out "analyzed slice" instead of
+  "category total"). FR-10 cache key extended with `filtersHash`
+  (empty string when unfiltered, so v4 cache entries remain valid).
+  AC-13/14/15 added. Implementation pinned to in-memory filtering in
+  the service layer (FR-17); ADR-0006 records the choice and the
+  scale-up trigger that flips it to a JPA push-down (roadmap R-11).
+  No prompt template change in this slice — the prompt v3 receives an
+  optional `appliedFilters` block when filters are set.
 - **v4 (2026-04-30)** — Sharpened the buying-guide prompt after smoke
   showed the v2 output sounded robotic ("o best overall é o..."). The
   `Picks.Pick` record now carries a `highlights: List<String>` field
