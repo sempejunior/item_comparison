@@ -12,5 +12,6 @@ public record CategoryInsightsResponse(
         List<RankingEntry> rankings,
         List<TopItem> topItems,
         String language,
-        String summary) {
+        String summary,
+        AppliedFilters appliedFilters) {
 }

@@ -32,4 +32,34 @@ final class CategoryInsightsApiExamples {
               "detail": "unsupported language tag: fr",
               "instance": "/api/v1/products/category-insights"
             }""";
+
+    static final String MIN_PRICE_NEGATIVE = """
+            {
+              "type": "https://api.example.com/errors/validation",
+              "title": "Validation failed",
+              "status": 400,
+              "detail": "Request body is invalid",
+              "instance": "/api/v1/products/category-insights",
+              "errors": [{"field": "minPrice", "message": "must be greater than or equal to 0"}]
+            }""";
+
+    static final String BOUNDS_INCONSISTENT = """
+            {
+              "type": "https://api.example.com/errors/validation",
+              "title": "Validation failed",
+              "status": 400,
+              "detail": "Request body is invalid",
+              "instance": "/api/v1/products/category-insights",
+              "errors": [{"field": "minPrice", "message": "minPrice must be less than or equal to maxPrice"}]
+            }""";
+
+    static final String MIN_RATING_OUT_OF_RANGE = """
+            {
+              "type": "https://api.example.com/errors/validation",
+              "title": "Validation failed",
+              "status": 400,
+              "detail": "Request body is invalid",
+              "instance": "/api/v1/products/category-insights",
+              "errors": [{"field": "minRating", "message": "must be less than or equal to 5"}]
+            }""";
 }

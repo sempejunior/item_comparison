@@ -2,7 +2,7 @@
 id: SPEC-002
 title: Catalog Product Domain Model
 version: v6
-status: Draft
+status: Accepted
 last_updated: 2026-04-29
 depends_on: [SPEC-001]
 ---

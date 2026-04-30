@@ -35,8 +35,8 @@ class CategoryInsightsControllerTest {
     @Test
     void happyPath_returns200WithRankings() throws Exception {
         CategoryInsightsResponse response = new CategoryInsightsResponse(
-                Category.SMARTPHONE, 3, List.of(), List.of(), "pt-BR", null);
-        when(insightsService.insights(eq(Category.SMARTPHONE), anyInt(), any(Language.class)))
+                Category.SMARTPHONE, 3, List.of(), List.of(), "pt-BR", null, null);
+        when(insightsService.insights(eq(Category.SMARTPHONE), anyInt(), any(Language.class), any()))
                 .thenReturn(response);
 
         mockMvc.perform(get("/api/v1/products/category-insights?category=SMARTPHONE"))
@@ -78,5 +78,26 @@ class CategoryInsightsControllerTest {
     void missingCategory_returns400() throws Exception {
         mockMvc.perform(get("/api/v1/products/category-insights"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void minPriceNegative_returns400Validation() throws Exception {
+        mockMvc.perform(get("/api/v1/products/category-insights?category=SMARTPHONE&minPrice=-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://api.example.com/errors/validation"));
+    }
+
+    @Test
+    void minRatingOutOfRange_returns400Validation() throws Exception {
+        mockMvc.perform(get("/api/v1/products/category-insights?category=SMARTPHONE&minRating=6"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://api.example.com/errors/validation"));
+    }
+
+    @Test
+    void minPriceGreaterThanMaxPrice_returns400Validation() throws Exception {
+        mockMvc.perform(get("/api/v1/products/category-insights?category=SMARTPHONE&minPrice=3000&maxPrice=2000"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://api.example.com/errors/validation"));
     }
 }

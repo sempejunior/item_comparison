@@ -1,8 +1,8 @@
 ---
 id: ROADMAP
 title: Production scaling and next bets
-version: v4
-status: Draft
+version: v5
+status: Accepted
 last_updated: 2026-04-30
 ---
 
@@ -422,48 +422,109 @@ dev-days on top of R-2.0 + R-9.1.
 
 ---
 
-## R-10 · Structured filters on /category-insights
+## R-10 · Extended filters on /category-insights (post-v5)
 
-**Trigger.** SPEC-005 (`/category-insights`) is live, but the user wants
-to narrow the panorama before the LLM gets it: *"compare smartphones
-acima de R$ 3000 com 4+ estrelas"*. Today the endpoint reasons over the
-full category seed and the LLM has to digest noise.
+**Status.** v5 of SPEC-005 ships `minPrice`, `maxPrice`, `minRating`
+applied **in-memory** in the service layer (ADR-0006). R-10 covers the
+*next* filters that did not make the v5 cut.
 
-**Approach.** Add structured query parameters to
-`GET /api/v1/products/category-insights`, applied as JPA predicates
-**before** ranking and before the prompt is assembled:
+**Trigger.** UX research shows that price + rating bounds aren't enough
+for some categories — shoppers want to slice by `condition` (NEW vs
+REFURBISHED vs USED) or by `brand`.
 
-- `minPrice` / `maxPrice` (BigDecimal, ≥ 0, `minPrice ≤ maxPrice`).
-- `minRating` (Double, `[0.0, 5.0]`).
+**Approach.** Add two more opt-in parameters to
+`/api/v1/products/category-insights`, validated and threaded through
+the same `InsightsFilters` record introduced in slice 5:
+
 - `condition` (enum: `NEW | REFURBISHED | USED`) — applied on the
   buy-box offer.
-- Optional `brand` (String, exact match against `attributes.brand`)
-  for categories where the attribute is indexed.
+- `brand` (String, exact match against `attributes.brand`).
 
-Every filter is **opt-in** (absent ⇒ no constraint). Request validation
-returns RFC 7807 `validation` with the offending field. The
-deterministic `rankings[]` and `topItems[]` are computed over the
-filtered subset; the LLM `summary` receives the filter description in
-the prompt context so the panorama is honest about the slice it is
-analyzing.
-
-**Architecture.** No new components — same pipeline as SPEC-005, with
-the filter set threaded through `CategoryInsightsService.getInsights`
-into the JPA query and into the prompt template. Cache key for the
-LLM summary becomes `(category, topK, language, filters-hash)`.
+Both follow the same pipeline as v5: applied once in the service,
+described in the prompt context, hashed into the cache key.
 
 **Tradeoffs.** Surface grows: more validation paths, more OpenAPI
 examples, more RFC 7807 cases, ~1 extra test per filter. Cache
-fragmentation: each filter combination is a distinct cache entry —
-acceptable while the catalog is small, revisit when the cache miss
-rate climbs. No filter implies a hidden assumption that the category
-fits in one page; that assumption is already part of SPEC-005 v1 and
-does not change here.
+fragmentation accelerates — track the miss rate to decide when R-11
+denormalization becomes mandatory.
 
-**Effort.** ~2 dev-days for the four filters above, including OpenAPI,
-RFC 7807 cases, unit + WebMvc tests, and prompt-context update.
-Implemented as **Slice 5** in the local plan after Slice 4
-(SPEC-005) closes.
+**Effort.** ~1 dev-day on top of slice 5 (the predicate record,
+prompt block and cache plumbing already exist).
+
+---
+
+## R-11 · Insights at scale — denormalize, push down, materialize
+
+**Trigger.** Any of: catalog cardinality per category passes ~10 000
+products; P95 of `/category-insights` (LLM disabled) exceeds 250 ms;
+`ai-category-insights` cache miss rate climbs above 30 %. ADR-0006
+records the same triggers from the perspective of the slice-5 design.
+
+**Approach.** Three layered moves, each shippable independently:
+
+### R-11.1 Denormalize derived columns
+
+`buyBox.price` is computed per request from the offer set today
+(ADR-0004 rule). At scale, that is the wrong shape for a filter. The
+move:
+
+1. Add `buy_box_price`, `buy_box_currency`, `buy_box_offer_id`,
+   `rating_avg`, `rating_count` columns on `catalog_product`.
+2. Populate from an application event (`OfferUpserted`,
+   `OfferRemoved`, `ReviewCreated`) emitted in the same DB
+   transaction that wrote the offer/review (outbox pattern, same
+   shape as R-2.1). The buy-box service stays as the source of
+   truth for the *full* `BuyBox` projection — denormalization only
+   serves filter predicates.
+3. Composite indexes `(category, buy_box_price)`,
+   `(category, rating_avg)`. B-tree is enough; both have high
+   cardinality.
+
+### R-11.2 Push filters into the data layer
+
+`InsightsFilters` (slice 5 record) gains a second method
+`toSpec() : Specification<CatalogProductEntity>`. The `matches`
+method stays — tests and the prompt-context describer must remain
+JPA-independent. The single line in `CategoryInsightsService.insights`
+flips from `.stream().filter(filters::matches)` to
+`repository.findAll(filters.toSpec(category))`. No other slice-5
+surface changes.
+
+### R-11.3 Materialize rankings
+
+When category cardinality crosses ~100 000, computing rankings per
+request (even from the DB) becomes the bottleneck. Move to a batch
+job (Spark / Flink) writing into `category_attribute_ranking`
+(`category`, `attribute_path`, `winner_id`, `runner_up_id`, `spread`,
+`computed_at`), refreshed hourly. The API reads the materialized
+table and applies filter predicates as a final WHERE on top.
+
+**Architecture.**
+
+```mermaid
+flowchart LR
+  Off[Offer write] --> Tx[(catalog tx)]
+  Tx --> Outbox[(outbox)]
+  Outbox --> Bus[Kafka<br/>catalog.product.upserted]
+  Bus --> Rebuild[denorm-worker<br/>updates buy_box_price, rating_avg]
+  Rebuild --> Pg[(PostgreSQL<br/>catalog_product +<br/>category_attribute_ranking)]
+  Bus --> Batch[batch ranker<br/>hourly]
+  Batch --> Pg
+  API[/category-insights/] --> Cache[(Redis<br/>category, filtersHash)]
+  Cache -.miss.-> Pg
+  Pg --> Cache
+  Cache --> API
+```
+
+**Tradeoffs.** Eventual consistency: filters reflect writes within
+seconds, materialized rankings within an hour. Acceptable because the
+shopper's mental model of a "category panorama" is not real-time.
+Operational cost: a topic, a worker, two more indexed columns, a
+batch job. The win is filter latency under 50 ms even at MELI scale
+and AI cost decoupled from per-request work.
+
+**Effort.** R-11.1 ~2 dev-days. R-11.2 ~1 day on top. R-11.3 ~3 days
+on top, plus standing ops for the batch.
 
 ---
 
@@ -495,10 +556,20 @@ Implemented as **Slice 5** in the local plan after Slice 4
 | R-8 Multi-region | 5 | Business-driven |
 | R-9.1 Free-form query → category insights | 2 | After SPEC-005 + R-3 |
 | R-9.2 RAG over rankings | 3 | After R-2.0 + R-9.1 |
-| R-10 Structured filters on /category-insights | 2 | Slice 5, immediately after Slice 4 |
+| R-10 Extended filters on /category-insights (`condition`, `brand`) | 1 | After Slice 5 |
+| R-11 Insights at scale (denormalize + push down + materialize)     | 6 | When triggers fire |
 
 ## Changelog
 
+- **v5 (2026-04-30)** — Reframed R-10 to cover only the *post-v5*
+  filters (`condition`, `brand`); the v5 filters (`minPrice`,
+  `maxPrice`, `minRating`) are SPEC-005 v5, not roadmap. Added R-11
+  (Insights at scale) covering the three layered moves the slice 5
+  ADR-0006 promised: R-11.1 denormalize `buy_box_price` + `rating_avg`
+  via outbox-driven worker; R-11.2 push `InsightsFilters` into a JPA
+  `Specification`; R-11.3 materialize `category_attribute_ranking`
+  via hourly batch + Redis cache. Triggers, architecture diagram,
+  tradeoffs and effort spelled out. Effort table updated.
 - **v4 (2026-04-30)** — Added R-10 (Structured filters on
   `/category-insights`: `minPrice`, `maxPrice`, `minRating`,
   `condition`, optional `brand`). Filters are applied as JPA predicates

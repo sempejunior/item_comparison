@@ -2,7 +2,7 @@
 id: SPEC-001
 title: Item Comparison API
 version: v8
-status: Draft
+status: Accepted
 last_updated: 2026-04-30
 ---
 
@@ -203,7 +203,7 @@ overreach.
   `com.hackerrank.sample`: `controller`, `service`, `repository`,
   `model`, `exception`, plus `Application`. Sub-packages such as
   `service/compare` and `service/ai` allowed where cohesion earns
-  them. See ADR-0003 (which supersedes ADR-0002) and SUBMISSION.md.
+  them. See ADR-0003 (which supersedes ADR-0002).
 - **C-4** — No real external dependency required at runtime. With
   `OPENAI_API_KEY` set, the LLM `summary` activates. Without it, the
   endpoint still returns the full deterministic comparison.

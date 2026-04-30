@@ -8,6 +8,7 @@ import com.hackerrank.sample.model.DifferenceEntry;
 import com.hackerrank.sample.model.Language;
 import com.hackerrank.sample.model.insights.RankingEntry;
 import com.hackerrank.sample.model.insights.TopItem;
+import com.hackerrank.sample.service.insights.InsightsFilters;
 import com.hackerrank.sample.service.insights.Picks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +63,7 @@ public class SummaryService {
     static final String PROMPT_VERSION_COMPARE = "v2";
     static final String PROMPT_TEMPLATE_INSIGHTS = "category-insights.v3.md";
     static final String PROMPT_VERSION_INSIGHTS = "v3";
+    static final String PROMPT_VERSION_INSIGHTS_FILTERED = "v3.1";
     private static final String DISABLED_KEY = "disabled";
     private static final String OPENAI_KEY_ENV = "OPENAI_API_KEY";
 
@@ -128,17 +130,28 @@ public class SummaryService {
             List<TopItem> topItems,
             Picks picks,
             Language language) {
+        return summariseCategoryInsights(category, productCount, rankings, topItems, picks, null, language);
+    }
+
+    public Optional<String> summariseCategoryInsights(
+            Category category,
+            int productCount,
+            List<RankingEntry> rankings,
+            List<TopItem> topItems,
+            Picks picks,
+            InsightsFilters filters,
+            Language language) {
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(rankings, "rankings");
         Objects.requireNonNull(topItems, "topItems");
         Objects.requireNonNull(language, "language");
 
-        String key = insightsCacheKey(category, productCount, rankings, topItems, picks, language);
+        String key = insightsCacheKey(category, productCount, rankings, topItems, picks, filters, language);
         return runLlm(
                 AiMetrics.KIND_INSIGHTS,
                 CACHE_NAME_INSIGHTS,
                 key,
-                () -> renderInsightsPrompt(category, productCount, rankings, topItems, picks, language));
+                () -> renderInsightsPrompt(category, productCount, rankings, topItems, picks, filters, language));
     }
 
     private Optional<String> runLlm(String kind, String cacheName, String key, PromptRenderer renderer) {
@@ -301,6 +314,7 @@ public class SummaryService {
             List<RankingEntry> rankings,
             List<TopItem> topItems,
             Picks picks,
+            InsightsFilters filters,
             Language language) throws JsonProcessingException {
         Map<String, String> bindings = new LinkedHashMap<>();
         bindings.put("language", language.tag());
@@ -309,7 +323,15 @@ public class SummaryService {
         bindings.put("rankings", objectMapper.writeValueAsString(slimRankings(rankings)));
         bindings.put("topItems", objectMapper.writeValueAsString(slimTopItems(topItems)));
         bindings.put("picks", picks == null ? "null" : objectMapper.writeValueAsString(picks));
+        bindings.put("appliedFilters", filters == null ? "" : appliedFiltersBlock(filters, language));
         return promptLoader.render(PROMPT_TEMPLATE_INSIGHTS, bindings);
+    }
+
+    private String appliedFiltersBlock(InsightsFilters filters, Language language) {
+        String header = language == Language.PT_BR
+                ? "Filtros aplicados pelo usuario (a recomendacao deve cobrir apenas este recorte): "
+                : "User-applied filters (the recommendation must cover only this slice): ";
+        return header + filters.describe(language);
     }
 
     private List<Map<String, Object>> slimItems(List<CompareItem> items) {
@@ -367,16 +389,20 @@ public class SummaryService {
         return PROMPT_VERSION_COMPARE + "|" + language.tag() + "|" + ids + "|" + differences.hashCode();
     }
 
-    private String insightsCacheKey(
+    String insightsCacheKey(
             Category category,
             int productCount,
             List<RankingEntry> rankings,
             List<TopItem> topItems,
             Picks picks,
+            InsightsFilters filters,
             Language language) {
-        return PROMPT_VERSION_INSIGHTS + "|" + language.tag() + "|" + category.name()
+        String prefix = filters == null ? PROMPT_VERSION_INSIGHTS : PROMPT_VERSION_INSIGHTS_FILTERED;
+        String filtersHash = filters == null ? "" : filters.digest();
+        return prefix + "|" + language.tag() + "|" + category.name()
                 + "|" + productCount + "|" + rankings.hashCode() + "|" + topItems.hashCode()
-                + "|" + (picks == null ? "0" : picks.hashCode());
+                + "|" + (picks == null ? "0" : picks.hashCode())
+                + "|" + filtersHash;
     }
 
     private String extractContent(ChatResponse response) {
