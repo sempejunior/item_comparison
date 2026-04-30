@@ -20,6 +20,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.web.client.HttpStatusCodeException;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -102,56 +103,69 @@ public class SummaryService {
         Objects.requireNonNull(differences, "differences");
         Objects.requireNonNull(language, "language");
 
-        String apiKey = resolveApiKey();
-        if (apiKey == null || keyInvalidForBoot.get()) {
-            metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_FALLBACK);
-            metrics.recordFallback(AiMetrics.REASON_NO_KEY);
-            return Optional.empty();
+        if (!hasUsableApiKey()) {
+            return fallback(AiMetrics.REASON_NO_KEY);
         }
 
         String key = cacheKey(items, differences, language);
         Cache cache = cacheManager.getCache(CACHE_NAME);
-        if (cache != null) {
-            String cached = cache.get(key, String.class);
-            if (cached != null) {
-                metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_CACHE_HIT);
-                return Optional.of(cached);
-            }
+        Optional<String> cached = readCached(cache, key);
+        if (cached.isPresent()) {
+            return cached;
         }
 
         if (!budget.tryConsume()) {
-            metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_FALLBACK);
-            metrics.recordFallback(AiMetrics.REASON_BUDGET);
-            return Optional.empty();
+            return fallback(AiMetrics.REASON_BUDGET);
         }
 
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (chatModel == null) {
-            metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_FALLBACK);
-            metrics.recordFallback(AiMetrics.REASON_NO_KEY);
+            return fallback(AiMetrics.REASON_NO_KEY);
+        }
+
+        Optional<String> renderedPrompt = renderPromptOrFallback(items, differences, language);
+        if (renderedPrompt.isEmpty()) {
             return Optional.empty();
         }
 
-        String renderedPrompt;
+        return invokeAndStore(chatModel, renderedPrompt.get(), cache, key);
+    }
+
+    private boolean hasUsableApiKey() {
+        return resolveApiKey() != null && !keyInvalidForBoot.get();
+    }
+
+    private Optional<String> readCached(Cache cache, String key) {
+        if (cache == null) {
+            return Optional.empty();
+        }
+        String hit = cache.get(key, String.class);
+        if (hit == null) {
+            return Optional.empty();
+        }
+        metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_CACHE_HIT);
+        return Optional.of(hit);
+    }
+
+    private Optional<String> renderPromptOrFallback(
+            List<CompareItem> items, List<DifferenceEntry> differences, Language language) {
         try {
-            renderedPrompt = renderPrompt(items, differences, language);
+            return Optional.of(renderPrompt(items, differences, language));
         } catch (JsonProcessingException ex) {
             log.warn("Failed to serialise compare payload for LLM prompt: {}", ex.getMessage());
-            metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_FALLBACK);
-            metrics.recordFallback(AiMetrics.REASON_EXCEPTION);
-            return Optional.empty();
+            return Optional.ofNullable(fallback(AiMetrics.REASON_EXCEPTION).orElse(null));
         }
+    }
 
+    private Optional<String> invokeAndStore(ChatModel chatModel, String renderedPrompt, Cache cache, String key) {
         long startedAt = System.nanoTime();
         try {
             ChatResponse response = invokeWithTimeout(chatModel, renderedPrompt);
-            String content = extractContent(response);
             recordTokens(response.getMetadata() == null ? null : response.getMetadata().getUsage());
             metrics.recordLatency(AiMetrics.KIND_SUMMARY, Duration.ofNanos(System.nanoTime() - startedAt));
+            String content = extractContent(response);
             if (content == null || content.isBlank()) {
-                metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_FALLBACK);
-                metrics.recordFallback(AiMetrics.REASON_EXCEPTION);
-                return Optional.empty();
+                return fallback(AiMetrics.REASON_EXCEPTION);
             }
             String summary = content.trim();
             if (cache != null) {
@@ -175,6 +189,12 @@ public class SummaryService {
             log.warn("LLM summary fallback (reason={}): {}", reason, ex.getMessage());
             return Optional.empty();
         }
+    }
+
+    private Optional<String> fallback(String reason) {
+        metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_FALLBACK);
+        metrics.recordFallback(reason);
+        return Optional.empty();
     }
 
     boolean isKeyInvalidForBoot() {
@@ -258,6 +278,19 @@ public class SummaryService {
     }
 
     private String classifyError(Throwable ex) {
+        HttpStatusCodeException httpEx = findHttpStatusCause(ex);
+        if (httpEx != null) {
+            int status = httpEx.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                return AiMetrics.REASON_AUTH;
+            }
+            if (status >= 500) {
+                return AiMetrics.REASON_SERVER_ERROR;
+            }
+            if (status >= 400) {
+                return AiMetrics.REASON_CLIENT_ERROR;
+            }
+        }
         String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase(Locale.ROOT);
         if (message.contains("401") || message.contains("unauthorized") || message.contains("invalid api key")) {
             return AiMetrics.REASON_AUTH;
@@ -269,5 +302,19 @@ public class SummaryService {
             return AiMetrics.REASON_CLIENT_ERROR;
         }
         return AiMetrics.REASON_EXCEPTION;
+    }
+
+    private static HttpStatusCodeException findHttpStatusCause(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof HttpStatusCodeException httpEx) {
+                return httpEx;
+            }
+            if (current.getCause() == current) {
+                return null;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 }
