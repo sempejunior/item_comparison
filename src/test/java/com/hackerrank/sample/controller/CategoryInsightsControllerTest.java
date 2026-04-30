@@ -35,7 +35,7 @@ class CategoryInsightsControllerTest {
     @Test
     void happyPath_returns200WithRankings() throws Exception {
         CategoryInsightsResponse response = new CategoryInsightsResponse(
-                Category.SMARTPHONE, 3, List.of(), List.of(), "pt-BR", null);
+                Category.SMARTPHONE, 3, List.of(), List.of(), "pt-BR", null, null);
         when(insightsService.insights(eq(Category.SMARTPHONE), anyInt(), any(Language.class)))
                 .thenReturn(response);
 

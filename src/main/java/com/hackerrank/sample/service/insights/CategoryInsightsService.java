@@ -76,7 +76,8 @@ public class CategoryInsightsService {
                 rankings,
                 topItems,
                 language.tag(),
-                summary.orElse(null));
+                summary.orElse(null),
+                null);
     }
 
     private List<RankingEntry> computeRankings(Category category, List<ProductDetail> products) {
