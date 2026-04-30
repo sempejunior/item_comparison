@@ -1,0 +1,10 @@
+{
+  "attributes": {
+    "good_high":   { "direction": "higher_better" },
+    "good_low":    { "direction": "lower_better" },
+    "missing_dir": { },
+    "blank_dir":   { "direction": "" },
+    "weird_dir":   { "direction": "sideways" },
+    "case_test":   { "direction": "HIGHER_BETTER" }
+  }
+}

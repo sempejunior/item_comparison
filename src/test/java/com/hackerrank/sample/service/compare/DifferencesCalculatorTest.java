@@ -136,4 +136,31 @@ class DifferencesCalculatorTest {
         assertThat(out.exclusiveAttributes()).containsKey(1L);
         assertThat(out.exclusiveAttributes().get(1L)).containsExactly("battery");
     }
+
+    @Test
+    void customMetadataOverload_overridesDirectionForArbitraryAttribute() {
+        ProductDetail a = new ProductDetail(1L, "P1", "d", "img", 4.0, Category.SMARTPHONE,
+                Map.of("noise_level", "30 dB"), List.of(), null);
+        ProductDetail b = new ProductDetail(2L, "P2", "d", "img", 4.0, Category.SMARTPHONE,
+                Map.of("noise_level", "45 dB"), List.of(), null);
+
+        FieldSet f = FieldSetProjector.parse("attributes.noise_level");
+        AttributeMetadata defaultRegistry = AttributeMetadata.defaultRegistry();
+        AttributeMetadata custom = new AttributeMetadata(Map.of(
+                "noise_level", AttributeMetadata.Direction.LOWER_BETTER));
+
+        DifferencesCalculator.DiffResult withDefault =
+                DifferencesCalculator.compute(List.of(a, b), f, defaultRegistry);
+        DifferenceEntry defaultEntry = withDefault.differences().stream()
+                .filter(e -> "attributes.noise_level".equals(e.path())).findFirst().orElseThrow();
+        assertThat(defaultEntry.isComparable()).isFalse();
+        assertThat(defaultEntry.winnerId()).isNull();
+
+        DifferencesCalculator.DiffResult withCustom =
+                DifferencesCalculator.compute(List.of(a, b), f, custom);
+        DifferenceEntry customEntry = withCustom.differences().stream()
+                .filter(e -> "attributes.noise_level".equals(e.path())).findFirst().orElseThrow();
+        assertThat(customEntry.isComparable()).isTrue();
+        assertThat(customEntry.winnerId()).isEqualTo(1L);
+    }
 }
