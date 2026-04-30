@@ -55,6 +55,26 @@ public class ProductService {
         return assemble(product, productOffers);
     }
 
+    public List<ProductDetail> getAllByCategory(Category category) {
+        if (category == null) {
+            return List.of();
+        }
+        List<CatalogProductEntity> all = products.findAllByCategory(category);
+        if (all.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = all.stream().map(CatalogProductEntity::getId).toList();
+        Map<Long, List<OfferEntity>> offersByProduct = new LinkedHashMap<>();
+        for (OfferEntity offer : offers.findAllByCatalogProductIdIn(ids)) {
+            offersByProduct.computeIfAbsent(offer.getCatalogProductId(), k -> new ArrayList<>()).add(offer);
+        }
+        List<ProductDetail> result = new ArrayList<>(all.size());
+        for (CatalogProductEntity p : all) {
+            result.add(assemble(p, offersByProduct.getOrDefault(p.getId(), List.of())));
+        }
+        return result;
+    }
+
     public List<ProductDetail> getByIds(Collection<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return List.of();

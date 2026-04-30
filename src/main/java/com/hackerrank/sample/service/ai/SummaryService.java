@@ -2,9 +2,12 @@ package com.hackerrank.sample.service.ai;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hackerrank.sample.model.Category;
 import com.hackerrank.sample.model.CompareItem;
 import com.hackerrank.sample.model.DifferenceEntry;
 import com.hackerrank.sample.model.Language;
+import com.hackerrank.sample.model.insights.RankingEntry;
+import com.hackerrank.sample.model.insights.TopItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -38,12 +41,13 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
- * Generates the optional natural-language {@code summary} field that
- * accompanies a deterministic comparison response (SPEC-004).
+ * Generates the optional natural-language {@code summary} fields exposed by
+ * the {@code /compare} (per-pair comparison) and {@code /category-insights}
+ * (whole-category landscape) endpoints (SPEC-004 + SPEC-005).
  *
  * <p>Every fallback path returns {@link Optional#empty()} and is recorded
- * via {@link AiMetrics}. The compare endpoint must remain a 200 even when
- * the LLM is unavailable — that contract lives in SPEC-003 §2.3.</p>
+ * via {@link AiMetrics}. The HTTP endpoints must remain a 200 even when the
+ * LLM is unavailable.</p>
  */
 @Service
 public class SummaryService {
@@ -51,7 +55,9 @@ public class SummaryService {
     private static final Logger log = LoggerFactory.getLogger(SummaryService.class);
 
     static final String CACHE_NAME = "ai-summary";
+    static final String CACHE_NAME_INSIGHTS = "ai-category-insights";
     static final String PROMPT_TEMPLATE = "compare-summary.v1.md";
+    static final String PROMPT_TEMPLATE_INSIGHTS = "category-insights.v1.md";
     private static final String DISABLED_KEY = "disabled";
     private static final String OPENAI_KEY_ENV = "OPENAI_API_KEY";
 
@@ -103,39 +109,69 @@ public class SummaryService {
         Objects.requireNonNull(differences, "differences");
         Objects.requireNonNull(language, "language");
 
+        String key = compareCacheKey(items, differences, language);
+        return runLlm(
+                AiMetrics.KIND_SUMMARY,
+                CACHE_NAME,
+                key,
+                () -> renderComparePrompt(items, differences, language));
+    }
+
+    public Optional<String> summariseCategoryInsights(
+            Category category,
+            int productCount,
+            List<RankingEntry> rankings,
+            List<TopItem> topItems,
+            Language language) {
+        Objects.requireNonNull(category, "category");
+        Objects.requireNonNull(rankings, "rankings");
+        Objects.requireNonNull(topItems, "topItems");
+        Objects.requireNonNull(language, "language");
+
+        String key = insightsCacheKey(category, productCount, rankings, topItems, language);
+        return runLlm(
+                AiMetrics.KIND_INSIGHTS,
+                CACHE_NAME_INSIGHTS,
+                key,
+                () -> renderInsightsPrompt(category, productCount, rankings, topItems, language));
+    }
+
+    private Optional<String> runLlm(String kind, String cacheName, String key, PromptRenderer renderer) {
         if (!hasUsableApiKey()) {
-            return fallback(AiMetrics.REASON_NO_KEY);
+            return fallback(kind, AiMetrics.REASON_NO_KEY);
         }
 
-        String key = cacheKey(items, differences, language);
-        Cache cache = cacheManager.getCache(CACHE_NAME);
-        Optional<String> cached = readCached(cache, key);
+        Cache cache = cacheManager.getCache(cacheName);
+        Optional<String> cached = readCached(kind, cache, key);
         if (cached.isPresent()) {
             return cached;
         }
 
         if (!budget.tryConsume()) {
-            return fallback(AiMetrics.REASON_BUDGET);
+            return fallback(kind, AiMetrics.REASON_BUDGET);
         }
 
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (chatModel == null) {
-            return fallback(AiMetrics.REASON_NO_KEY);
+            return fallback(kind, AiMetrics.REASON_NO_KEY);
         }
 
-        Optional<String> renderedPrompt = renderPromptOrFallback(items, differences, language);
-        if (renderedPrompt.isEmpty()) {
-            return Optional.empty();
+        String renderedPrompt;
+        try {
+            renderedPrompt = renderer.render();
+        } catch (JsonProcessingException ex) {
+            log.warn("Failed to serialise LLM payload (kind={}): {}", kind, ex.getMessage());
+            return fallback(kind, AiMetrics.REASON_EXCEPTION);
         }
 
-        return invokeAndStore(chatModel, renderedPrompt.get(), cache, key);
+        return invokeAndStore(kind, chatModel, renderedPrompt, cache, key);
     }
 
     private boolean hasUsableApiKey() {
         return resolveApiKey() != null && !keyInvalidForBoot.get();
     }
 
-    private Optional<String> readCached(Cache cache, String key) {
+    private Optional<String> readCached(String kind, Cache cache, String key) {
         if (cache == null) {
             return Optional.empty();
         }
@@ -143,56 +179,46 @@ public class SummaryService {
         if (hit == null) {
             return Optional.empty();
         }
-        metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_CACHE_HIT);
+        metrics.recordOutcome(kind, AiMetrics.OUTCOME_CACHE_HIT);
         return Optional.of(hit);
     }
 
-    private Optional<String> renderPromptOrFallback(
-            List<CompareItem> items, List<DifferenceEntry> differences, Language language) {
-        try {
-            return Optional.of(renderPrompt(items, differences, language));
-        } catch (JsonProcessingException ex) {
-            log.warn("Failed to serialise compare payload for LLM prompt: {}", ex.getMessage());
-            return Optional.ofNullable(fallback(AiMetrics.REASON_EXCEPTION).orElse(null));
-        }
-    }
-
-    private Optional<String> invokeAndStore(ChatModel chatModel, String renderedPrompt, Cache cache, String key) {
+    private Optional<String> invokeAndStore(String kind, ChatModel chatModel, String renderedPrompt, Cache cache, String key) {
         long startedAt = System.nanoTime();
         try {
             ChatResponse response = invokeWithTimeout(chatModel, renderedPrompt);
-            recordTokens(response.getMetadata() == null ? null : response.getMetadata().getUsage());
-            metrics.recordLatency(AiMetrics.KIND_SUMMARY, Duration.ofNanos(System.nanoTime() - startedAt));
+            recordTokens(kind, response.getMetadata() == null ? null : response.getMetadata().getUsage());
+            metrics.recordLatency(kind, Duration.ofNanos(System.nanoTime() - startedAt));
             String content = extractContent(response);
             if (content == null || content.isBlank()) {
-                return fallback(AiMetrics.REASON_EXCEPTION);
+                return fallback(kind, AiMetrics.REASON_EXCEPTION);
             }
             String summary = content.trim();
             if (cache != null) {
                 cache.put(key, summary);
             }
-            metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_OK);
+            metrics.recordOutcome(kind, AiMetrics.OUTCOME_OK);
             return Optional.of(summary);
         } catch (TimeoutException ex) {
-            metrics.recordLatency(AiMetrics.KIND_SUMMARY, Duration.ofNanos(System.nanoTime() - startedAt));
-            metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_TIMEOUT);
+            metrics.recordLatency(kind, Duration.ofNanos(System.nanoTime() - startedAt));
+            metrics.recordOutcome(kind, AiMetrics.OUTCOME_TIMEOUT);
             metrics.recordFallback(AiMetrics.REASON_TIMEOUT);
             return Optional.empty();
         } catch (Throwable ex) {
-            metrics.recordLatency(AiMetrics.KIND_SUMMARY, Duration.ofNanos(System.nanoTime() - startedAt));
+            metrics.recordLatency(kind, Duration.ofNanos(System.nanoTime() - startedAt));
             String reason = classifyError(ex);
             if (AiMetrics.REASON_AUTH.equals(reason)) {
                 keyInvalidForBoot.set(true);
             }
-            metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_FALLBACK);
+            metrics.recordOutcome(kind, AiMetrics.OUTCOME_FALLBACK);
             metrics.recordFallback(reason);
-            log.warn("LLM summary fallback (reason={}): {}", reason, ex.getMessage());
+            log.warn("LLM fallback (kind={}, reason={}): {}", kind, reason, ex.getMessage());
             return Optional.empty();
         }
     }
 
-    private Optional<String> fallback(String reason) {
-        metrics.recordOutcome(AiMetrics.KIND_SUMMARY, AiMetrics.OUTCOME_FALLBACK);
+    private Optional<String> fallback(String kind, String reason) {
+        metrics.recordOutcome(kind, AiMetrics.OUTCOME_FALLBACK);
         metrics.recordFallback(reason);
         return Optional.empty();
     }
@@ -222,13 +248,28 @@ public class SummaryService {
         return value.trim();
     }
 
-    private String renderPrompt(List<CompareItem> items, List<DifferenceEntry> differences, Language language)
+    private String renderComparePrompt(List<CompareItem> items, List<DifferenceEntry> differences, Language language)
             throws JsonProcessingException {
         Map<String, String> bindings = new LinkedHashMap<>();
         bindings.put("language", language.tag());
         bindings.put("products", objectMapper.writeValueAsString(slimItems(items)));
         bindings.put("differences", objectMapper.writeValueAsString(differences));
         return promptLoader.render(PROMPT_TEMPLATE, bindings);
+    }
+
+    private String renderInsightsPrompt(
+            Category category,
+            int productCount,
+            List<RankingEntry> rankings,
+            List<TopItem> topItems,
+            Language language) throws JsonProcessingException {
+        Map<String, String> bindings = new LinkedHashMap<>();
+        bindings.put("language", language.tag());
+        bindings.put("category", category.name());
+        bindings.put("productCount", Integer.toString(productCount));
+        bindings.put("rankings", objectMapper.writeValueAsString(slimRankings(rankings)));
+        bindings.put("topItems", objectMapper.writeValueAsString(slimTopItems(topItems)));
+        return promptLoader.render(PROMPT_TEMPLATE_INSIGHTS, bindings);
     }
 
     private List<Map<String, Object>> slimItems(List<CompareItem> items) {
@@ -242,7 +283,41 @@ public class SummaryService {
         }).collect(Collectors.toList());
     }
 
-    private String cacheKey(List<CompareItem> items, List<DifferenceEntry> differences, Language language) {
+    private List<Map<String, Object>> slimRankings(List<RankingEntry> rankings) {
+        return rankings.stream().map(r -> {
+            Map<String, Object> slim = new LinkedHashMap<>();
+            slim.put("path", r.path());
+            slim.put("isComparable", r.isComparable());
+            if (r.winner() != null) {
+                Map<String, Object> w = new LinkedHashMap<>();
+                w.put("name", r.winner().name());
+                w.put("value", r.winner().value());
+                slim.put("winner", w);
+            }
+            if (r.runnerUp() != null) {
+                Map<String, Object> ru = new LinkedHashMap<>();
+                ru.put("name", r.runnerUp().name());
+                ru.put("value", r.runnerUp().value());
+                slim.put("runnerUp", ru);
+            }
+            if (r.spread() != null) {
+                slim.put("spread", r.spread());
+            }
+            return slim;
+        }).collect(Collectors.toList());
+    }
+
+    private List<Map<String, Object>> slimTopItems(List<TopItem> topItems) {
+        return topItems.stream().map(t -> {
+            Map<String, Object> slim = new LinkedHashMap<>();
+            slim.put("name", t.name());
+            slim.put("price", t.price());
+            slim.put("rating", t.rating());
+            return slim;
+        }).collect(Collectors.toList());
+    }
+
+    private String compareCacheKey(List<CompareItem> items, List<DifferenceEntry> differences, Language language) {
         String ids = items.stream()
                 .map(CompareItem::id)
                 .filter(Objects::nonNull)
@@ -250,6 +325,16 @@ public class SummaryService {
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
         return language.tag() + "|" + ids + "|" + differences.hashCode();
+    }
+
+    private String insightsCacheKey(
+            Category category,
+            int productCount,
+            List<RankingEntry> rankings,
+            List<TopItem> topItems,
+            Language language) {
+        return language.tag() + "|" + category.name() + "|" + productCount
+                + "|" + rankings.hashCode() + "|" + topItems.hashCode();
     }
 
     private String extractContent(ChatResponse response) {
@@ -263,17 +348,17 @@ public class SummaryService {
         return generation.getOutput().getContent();
     }
 
-    private void recordTokens(Usage usage) {
+    private void recordTokens(String kind, Usage usage) {
         if (usage == null) {
             return;
         }
         Long prompt = usage.getPromptTokens();
         Long completion = usage.getGenerationTokens();
         if (prompt != null) {
-            metrics.recordTokens(AiMetrics.KIND_SUMMARY, AiMetrics.DIRECTION_IN, prompt);
+            metrics.recordTokens(kind, AiMetrics.DIRECTION_IN, prompt);
         }
         if (completion != null) {
-            metrics.recordTokens(AiMetrics.KIND_SUMMARY, AiMetrics.DIRECTION_OUT, completion);
+            metrics.recordTokens(kind, AiMetrics.DIRECTION_OUT, completion);
         }
     }
 
@@ -316,5 +401,10 @@ public class SummaryService {
             current = current.getCause();
         }
         return null;
+    }
+
+    @FunctionalInterface
+    private interface PromptRenderer {
+        String render() throws JsonProcessingException;
     }
 }

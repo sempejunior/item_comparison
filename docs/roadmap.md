@@ -1,7 +1,7 @@
 ---
 id: ROADMAP
 title: Production scaling and next bets
-version: v3
+version: v4
 status: Draft
 last_updated: 2026-04-30
 ---
@@ -422,6 +422,51 @@ dev-days on top of R-2.0 + R-9.1.
 
 ---
 
+## R-10 · Structured filters on /category-insights
+
+**Trigger.** SPEC-005 (`/category-insights`) is live, but the user wants
+to narrow the panorama before the LLM gets it: *"compare smartphones
+acima de R$ 3000 com 4+ estrelas"*. Today the endpoint reasons over the
+full category seed and the LLM has to digest noise.
+
+**Approach.** Add structured query parameters to
+`GET /api/v1/products/category-insights`, applied as JPA predicates
+**before** ranking and before the prompt is assembled:
+
+- `minPrice` / `maxPrice` (BigDecimal, ≥ 0, `minPrice ≤ maxPrice`).
+- `minRating` (Double, `[0.0, 5.0]`).
+- `condition` (enum: `NEW | REFURBISHED | USED`) — applied on the
+  buy-box offer.
+- Optional `brand` (String, exact match against `attributes.brand`)
+  for categories where the attribute is indexed.
+
+Every filter is **opt-in** (absent ⇒ no constraint). Request validation
+returns RFC 7807 `validation` with the offending field. The
+deterministic `rankings[]` and `topItems[]` are computed over the
+filtered subset; the LLM `summary` receives the filter description in
+the prompt context so the panorama is honest about the slice it is
+analyzing.
+
+**Architecture.** No new components — same pipeline as SPEC-005, with
+the filter set threaded through `CategoryInsightsService.getInsights`
+into the JPA query and into the prompt template. Cache key for the
+LLM summary becomes `(category, topK, language, filters-hash)`.
+
+**Tradeoffs.** Surface grows: more validation paths, more OpenAPI
+examples, more RFC 7807 cases, ~1 extra test per filter. Cache
+fragmentation: each filter combination is a distinct cache entry —
+acceptable while the catalog is small, revisit when the cache miss
+rate climbs. No filter implies a hidden assumption that the category
+fits in one page; that assumption is already part of SPEC-005 v1 and
+does not change here.
+
+**Effort.** ~2 dev-days for the four filters above, including OpenAPI,
+RFC 7807 cases, unit + WebMvc tests, and prompt-context update.
+Implemented as **Slice 5** in the local plan after Slice 4
+(SPEC-005) closes.
+
+---
+
 ## What we explicitly do not plan to do
 
 - **GraphQL.** REST + sparse fieldsets covers the same need with less
@@ -450,9 +495,16 @@ dev-days on top of R-2.0 + R-9.1.
 | R-8 Multi-region | 5 | Business-driven |
 | R-9.1 Free-form query → category insights | 2 | After SPEC-005 + R-3 |
 | R-9.2 RAG over rankings | 3 | After R-2.0 + R-9.1 |
+| R-10 Structured filters on /category-insights | 2 | Slice 5, immediately after Slice 4 |
 
 ## Changelog
 
+- **v4 (2026-04-30)** — Added R-10 (Structured filters on
+  `/category-insights`: `minPrice`, `maxPrice`, `minRating`,
+  `condition`, optional `brand`). Filters are applied as JPA predicates
+  before ranking and threaded into the LLM prompt context. Earmarked
+  as Slice 5, to ship right after SPEC-005 (Slice 4) closes. Effort
+  table updated.
 - **v3 (2026-04-30)** — Added R-9 (Natural-language category
   exploration) as a two-step evolution of SPEC-005: R-9.1 wraps an
   LLM filter extractor over `CategoryInsightsService` so the user can

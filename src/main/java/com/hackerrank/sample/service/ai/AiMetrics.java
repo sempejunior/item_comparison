@@ -29,6 +29,7 @@ public class AiMetrics {
     public static final String TAG_REASON = "reason";
 
     public static final String KIND_SUMMARY = "summary";
+    public static final String KIND_INSIGHTS = "category_insights";
 
     public static final String OUTCOME_OK = "ok";
     public static final String OUTCOME_CACHE_HIT = "cache_hit";
