@@ -32,6 +32,7 @@ terms a non-technical shopper can act on.
 Language for the response: {{language}}
 Category: {{category}}
 Product count: {{productCount}}
+{{appliedFilters}}
 
 Pre-computed picks (JSON, source of truth — narrate these, never replace):
 {{picks}}
