@@ -12,6 +12,7 @@ import com.hackerrank.sample.service.ai.SummaryService;
 import com.hackerrank.sample.service.compare.AttributeMetadata;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CategoryInsightsServiceTest {
@@ -36,7 +38,7 @@ class CategoryInsightsServiceTest {
     void setUp() {
         productService = mock(ProductService.class);
         summaryService = mock(SummaryService.class);
-        when(summaryService.summariseCategoryInsights(any(), anyInt(), anyList(), anyList(), any()))
+        when(summaryService.summariseCategoryInsights(any(), anyInt(), anyList(), anyList(), any(), any()))
                 .thenReturn(Optional.empty());
         service = new CategoryInsightsService(productService, summaryService, AttributeMetadata.defaultRegistry());
     }
@@ -116,9 +118,94 @@ class CategoryInsightsServiceTest {
         assertThat(battery.winner().id()).isEqualTo(2L);
     }
 
+    @Test
+    void picksAreComputedAndForwardedToSummaryService() {
+        when(productService.getAllByCategory(Category.SMARTPHONE)).thenReturn(List.of(
+                product(1L, "Cheap Phone", new BigDecimal("500"), 4.0, Map.of("battery", "3000 mAh")),
+                product(2L, "Mid Phone", new BigDecimal("1000"), 4.5, Map.of("battery", "4000 mAh")),
+                product(3L, "Premium Phone", new BigDecimal("3000"), 4.9, Map.of("battery", "5000 mAh"))
+        ));
+
+        service.insights(Category.SMARTPHONE, 5, Language.PT_BR);
+
+        ArgumentCaptor<Picks> picksCaptor = ArgumentCaptor.forClass(Picks.class);
+        verify(summaryService).summariseCategoryInsights(
+                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
+
+        Picks picks = picksCaptor.getValue();
+        assertThat(picks).isNotNull();
+        assertThat(picks.bestOverall().id()).isEqualTo(3L);
+        assertThat(picks.bestOverall().rating()).isEqualTo(4.9);
+        assertThat(picks.cheapest().id()).isEqualTo(1L);
+        assertThat(picks.cheapest().price()).isEqualByComparingTo("500");
+        assertThat(picks.bestValue().id()).isEqualTo(1L);
+        assertThat(picks.bestOverall().reason()).contains("4.9");
+        assertThat(picks.cheapest().reason()).containsIgnoringCase("lowest price");
+    }
+
+    @Test
+    void picksAreNullWhenAllRatingsAndPricesMissing() {
+        when(productService.getAllByCategory(Category.SMARTPHONE)).thenReturn(List.of(
+                productNoRatingNoBuyBox(10L, "Bare A"),
+                productNoRatingNoBuyBox(11L, "Bare B")
+        ));
+
+        service.insights(Category.SMARTPHONE, 5, Language.PT_BR);
+
+        ArgumentCaptor<Picks> picksCaptor = ArgumentCaptor.forClass(Picks.class);
+        verify(summaryService).summariseCategoryInsights(
+                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
+
+        assertThat(picksCaptor.getValue()).isNull();
+    }
+
+    @Test
+    void picksTieBreakOnLowerIdWhenRatingAndPriceMatch() {
+        when(productService.getAllByCategory(Category.SMARTPHONE)).thenReturn(List.of(
+                product(7L, "Tie B", new BigDecimal("1000"), 4.5, Map.of()),
+                product(3L, "Tie A", new BigDecimal("1000"), 4.5, Map.of())
+        ));
+
+        service.insights(Category.SMARTPHONE, 5, Language.PT_BR);
+
+        ArgumentCaptor<Picks> picksCaptor = ArgumentCaptor.forClass(Picks.class);
+        verify(summaryService).summariseCategoryInsights(
+                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
+
+        Picks picks = picksCaptor.getValue();
+        assertThat(picks.bestOverall().id()).isEqualTo(3L);
+        assertThat(picks.cheapest().id()).isEqualTo(3L);
+        assertThat(picks.bestValue().id()).isEqualTo(3L);
+    }
+
+    @Test
+    void bestValueFavorsHigherRatingPerPriceRatio() {
+        when(productService.getAllByCategory(Category.SMARTPHONE)).thenReturn(List.of(
+                product(1L, "High end", new BigDecimal("4000"), 4.9, Map.of()),
+                product(2L, "Sweet spot", new BigDecimal("1000"), 4.6, Map.of()),
+                product(3L, "Budget", new BigDecimal("500"), 4.0, Map.of())
+        ));
+
+        service.insights(Category.SMARTPHONE, 5, Language.PT_BR);
+
+        ArgumentCaptor<Picks> picksCaptor = ArgumentCaptor.forClass(Picks.class);
+        verify(summaryService).summariseCategoryInsights(
+                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
+
+        Picks picks = picksCaptor.getValue();
+        assertThat(picks.bestValue().id()).isEqualTo(3L);
+        assertThat(picks.bestOverall().id()).isEqualTo(1L);
+        assertThat(picks.cheapest().id()).isEqualTo(3L);
+    }
+
     private static ProductDetail product(long id, String name, BigDecimal price, double rating, Map<String, Object> attrs) {
         BuyBox bb = new BuyBox(id, "s" + id, "Seller", 90, price, "BRL", Condition.NEW, true, 10);
         return new ProductDetail(id, name, "desc", "img", rating, Category.SMARTPHONE,
                 new LinkedHashMap<>(attrs), List.of(), bb);
+    }
+
+    private static ProductDetail productNoRatingNoBuyBox(long id, String name) {
+        return new ProductDetail(id, name, "desc", "img", null, Category.SMARTPHONE,
+                new LinkedHashMap<>(), List.of(), null);
     }
 }

@@ -8,6 +8,7 @@ import com.hackerrank.sample.model.DifferenceEntry;
 import com.hackerrank.sample.model.Language;
 import com.hackerrank.sample.model.insights.RankingEntry;
 import com.hackerrank.sample.model.insights.TopItem;
+import com.hackerrank.sample.service.insights.Picks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -57,7 +58,8 @@ public class SummaryService {
     static final String CACHE_NAME = "ai-summary";
     static final String CACHE_NAME_INSIGHTS = "ai-category-insights";
     static final String PROMPT_TEMPLATE = "compare-summary.v1.md";
-    static final String PROMPT_TEMPLATE_INSIGHTS = "category-insights.v1.md";
+    static final String PROMPT_TEMPLATE_INSIGHTS = "category-insights.v2.md";
+    static final String PROMPT_VERSION_INSIGHTS = "v2";
     private static final String DISABLED_KEY = "disabled";
     private static final String OPENAI_KEY_ENV = "OPENAI_API_KEY";
 
@@ -122,18 +124,19 @@ public class SummaryService {
             int productCount,
             List<RankingEntry> rankings,
             List<TopItem> topItems,
+            Picks picks,
             Language language) {
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(rankings, "rankings");
         Objects.requireNonNull(topItems, "topItems");
         Objects.requireNonNull(language, "language");
 
-        String key = insightsCacheKey(category, productCount, rankings, topItems, language);
+        String key = insightsCacheKey(category, productCount, rankings, topItems, picks, language);
         return runLlm(
                 AiMetrics.KIND_INSIGHTS,
                 CACHE_NAME_INSIGHTS,
                 key,
-                () -> renderInsightsPrompt(category, productCount, rankings, topItems, language));
+                () -> renderInsightsPrompt(category, productCount, rankings, topItems, picks, language));
     }
 
     private Optional<String> runLlm(String kind, String cacheName, String key, PromptRenderer renderer) {
@@ -262,6 +265,7 @@ public class SummaryService {
             int productCount,
             List<RankingEntry> rankings,
             List<TopItem> topItems,
+            Picks picks,
             Language language) throws JsonProcessingException {
         Map<String, String> bindings = new LinkedHashMap<>();
         bindings.put("language", language.tag());
@@ -269,6 +273,7 @@ public class SummaryService {
         bindings.put("productCount", Integer.toString(productCount));
         bindings.put("rankings", objectMapper.writeValueAsString(slimRankings(rankings)));
         bindings.put("topItems", objectMapper.writeValueAsString(slimTopItems(topItems)));
+        bindings.put("picks", picks == null ? "null" : objectMapper.writeValueAsString(picks));
         return promptLoader.render(PROMPT_TEMPLATE_INSIGHTS, bindings);
     }
 
@@ -332,9 +337,11 @@ public class SummaryService {
             int productCount,
             List<RankingEntry> rankings,
             List<TopItem> topItems,
+            Picks picks,
             Language language) {
-        return language.tag() + "|" + category.name() + "|" + productCount
-                + "|" + rankings.hashCode() + "|" + topItems.hashCode();
+        return PROMPT_VERSION_INSIGHTS + "|" + language.tag() + "|" + category.name()
+                + "|" + productCount + "|" + rankings.hashCode() + "|" + topItems.hashCode()
+                + "|" + (picks == null ? "0" : picks.hashCode());
     }
 
     private String extractContent(ChatResponse response) {

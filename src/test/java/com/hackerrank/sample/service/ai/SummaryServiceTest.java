@@ -7,6 +7,9 @@ import com.hackerrank.sample.model.CompareItem;
 import com.hackerrank.sample.model.Condition;
 import com.hackerrank.sample.model.DifferenceEntry;
 import com.hackerrank.sample.model.Language;
+import com.hackerrank.sample.model.insights.RankingEntry;
+import com.hackerrank.sample.model.insights.TopItem;
+import com.hackerrank.sample.service.insights.Picks;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -53,7 +56,7 @@ class SummaryServiceTest {
         registry = new SimpleMeterRegistry();
         metrics = new AiMetrics(registry);
         budget = new DailyBudget(0);
-        cacheManager = new ConcurrentMapCacheManager("ai-summary");
+        cacheManager = new ConcurrentMapCacheManager("ai-summary", "ai-category-insights");
         chatModel = mock(ChatModel.class);
         chatModelProvider = providerOf(chatModel);
     }
@@ -195,6 +198,50 @@ class SummaryServiceTest {
         assertThat(result).isEmpty();
         assertThat(counterCount("ai_fallback_total", "reason", "budget")).isEqualTo(1.0);
         verify(chatModel, never()).call(any(Prompt.class));
+    }
+
+    @Test
+    void categoryInsightsWithPicksRendersV2PromptAndCachesPerVersion() {
+        AtomicInteger calls = new AtomicInteger();
+        when(chatModel.call(any(Prompt.class))).thenAnswer(inv -> {
+            Prompt prompt = inv.getArgument(0);
+            String text = prompt.getInstructions().get(0).getContent();
+            assertThat(text).contains("buying-guide assistant");
+            assertThat(text).contains("\"bestOverall\"");
+            assertThat(text).contains("\"cheapest\"");
+            assertThat(text).contains("Premium Phone");
+            calls.incrementAndGet();
+            return chatResponse("guia de compra", 100L, 50L);
+        });
+        SummaryService service = service(() -> "sk-real");
+
+        Picks picks = new Picks(
+                new Picks.Pick(3L, "Premium Phone", new BigDecimal("3000"), "BRL", 4.9, "rating 4.9"),
+                new Picks.Pick(1L, "Cheap Phone", new BigDecimal("500"), "BRL", 4.0, "rating 4.0 at 500"),
+                new Picks.Pick(1L, "Cheap Phone", new BigDecimal("500"), "BRL", 4.0, "lowest price at 500"));
+
+        Optional<String> first = service.summariseCategoryInsights(
+                Category.SMARTPHONE, 3, List.<RankingEntry>of(), List.<TopItem>of(), picks, Language.PT_BR);
+        Optional<String> second = service.summariseCategoryInsights(
+                Category.SMARTPHONE, 3, List.<RankingEntry>of(), List.<TopItem>of(), picks, Language.PT_BR);
+
+        assertThat(first).contains("guia de compra");
+        assertThat(second).contains("guia de compra");
+        verify(chatModel, times(1)).call(any(Prompt.class));
+        assertThat(counterCount("ai_calls_total", "outcome", "cache_hit")).isEqualTo(1.0);
+        assertThat(counterCount("ai_calls_total", "outcome", "ok")).isEqualTo(1.0);
+    }
+
+    @Test
+    void categoryInsightsWithNullPicksStillRendersWithoutNpe() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse("sem picks", 10L, 5L));
+        SummaryService service = service(() -> "sk-real");
+
+        Optional<String> result = service.summariseCategoryInsights(
+                Category.SMARTPHONE, 2, List.<RankingEntry>of(), List.<TopItem>of(), null, Language.EN);
+
+        assertThat(result).contains("sem picks");
+        verify(chatModel, times(1)).call(any(Prompt.class));
     }
 
     private SummaryService service(Supplier<String> apiKeyResolver) {

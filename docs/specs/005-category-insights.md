@@ -1,7 +1,7 @@
 ---
 id: SPEC-005
 title: Category Insights
-version: v2
+version: v3
 status: Accepted
 last_updated: 2026-04-30
 depends_on: [SPEC-001, SPEC-002, SPEC-003, SPEC-004]
@@ -172,23 +172,43 @@ normalization (R-8).
 
 - **FR-8** — When `OPENAI_API_KEY` is set and the LLM call succeeds, the
   response carries a `summary` string in the requested `language`. The
-  prompt is fed:
+  summary is a **buying guide**: it presents three pre-computed picks
+  (best overall, best value, cheapest) and closes with a one-line
+  "if you prioritise X, go with Y" directive. The LLM is a *narrator* —
+  it may only cite product names from the picks block, never invent
+  recommendations. The prompt is fed:
   - `category` (string).
   - `productCount` (integer).
   - `rankings` (the deterministic array above, slimmed: `path`,
-    `winner.name + value`, `runnerUp.name + value`, `spread`).
-  - `topItems` (slimmed: `name`, `price`, `rating`).
+    `winner.name + value`, `runnerUp.name + value`, `spread`) —
+    supporting evidence.
+  - `topItems` (slimmed: `name`, `price`, `rating`) — supporting
+    evidence.
+  - `picks` — JSON object with `bestOverall`, `bestValue`, `cheapest`,
+    each `{ id, name, price, currency, rating, reason }`. Heuristics:
+    - `bestOverall` = highest `rating`; ties broken by lower price
+      then lower id.
+    - `bestValue` = highest `rating / price`; ties by higher rating
+      then lower id (skipped when no product has both fields).
+    - `cheapest` = lowest `buyBox.price`; ties by higher rating then
+      lower id.
+    Picks are computed in `CategoryInsightsService` and never exposed
+    on the API response — they exist only as input to the prompt, so
+    callers must derive recommendations from `rankings`/`topItems`.
   - `language`.
 - **FR-9** — Prompt template lives at
-  `src/main/resources/prompts/category-insights.v1.md`, versioned by
-  filename (same convention as `compare-summary.v1.md`). It instructs
-  the model to produce a single paragraph (≤ 80 words, slightly longer
-  than `compare` because it has more content to weave) describing the
-  category landscape: which item leads on what, the price/quality
-  spread, and a one-sentence "if you want X go with Y" hint. Rankings
-  are declared as the source of truth — the model must not invent
-  values.
-- **FR-10** — Cache key is `(category, topK, language)`. The cache lives
+  `src/main/resources/prompts/category-insights.v2.md`, versioned by
+  filename (same convention as `compare-summary.v1.md`). v2 supersedes
+  v1 (which framed the summary as a neutral landscape description; v2
+  reframes it as a buying guide built on the deterministic picks).
+  Output contract: single paragraph, ≤ 110 words, plain text, no
+  markdown. The model must name the three picks using their `reason`
+  field, may cite at most one supporting fact per pick from `rankings`,
+  and must close with "if you prioritise X, go with Y" where Y is one
+  of the picks. The cache key includes the prompt version (`v2|...`)
+  so a future v3 prompt invalidates the cache automatically.
+- **FR-10** — Cache key is `(promptVersion, category, topK, language,
+  rankingsHash, topItemsHash, picksHash)`. The cache lives
   alongside `ai-summary` as a new Caffeine cache `ai-category-insights`
   with the same `maximum-size` / `ttl-minutes` defaults. Hits are
   counted as `ai_calls_total{kind=category_insights, outcome=cache_hit}`.
@@ -297,6 +317,22 @@ on `topItems` in v1 — projection is already lean).*
 
 ## 11. Changelog
 
+- **v3 (2026-04-30)** — Reframed the LLM `summary` from a neutral
+  landscape description to a **buying guide** anchored on three
+  deterministic picks (best overall, best value, cheapest) computed in
+  `CategoryInsightsService` and fed to the prompt as a separate
+  `picks` block. Heuristics: `bestOverall` = highest rating (ties:
+  lower price, lower id); `bestValue` = highest `rating / price` (ties:
+  higher rating, lower id); `cheapest` = lowest price (ties: higher
+  rating, lower id). Picks are *not* part of the public response —
+  they are only an input to the prompt, which keeps the LLM as a
+  narrator (it can only cite the names it received, removing the
+  hallucination risk identified during smoke). Prompt template bumped
+  to `category-insights.v2.md` and the `ai-category-insights` cache
+  key now includes the prompt version (`v2|...`), so a future v3
+  prompt invalidates cached entries automatically. Old v1 template
+  removed since it has no remaining callers (history kept in git).
+  FR-8/FR-9/FR-10 updated; AC list unchanged. No public schema change.
 - **v2 (2026-04-30, status flipped Draft → Accepted)** — Status flipped
   on Slice 4 kickoff alongside ADR-0005 (dedicated endpoint vs param on
   `/compare`) and `plan-slice4.md` v1. No content change vs the v2

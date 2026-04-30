@@ -20,9 +20,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -62,9 +64,11 @@ public class CategoryInsightsService {
                 : computeRankings(category, products);
         List<TopItem> topItems = pickTopItems(products, topK);
 
+        Picks picks = productCount < 2 ? null : computePicks(products);
         Optional<String> summary = productCount < 2
                 ? Optional.empty()
-                : summaryService.summariseCategoryInsights(category, productCount, rankings, topItems, language);
+                : summaryService.summariseCategoryInsights(
+                        category, productCount, rankings, topItems, picks, language);
 
         return new CategoryInsightsResponse(
                 category,
@@ -237,6 +241,97 @@ public class CategoryInsightsService {
                     p.rating()));
         }
         return out;
+    }
+
+    private Picks computePicks(List<ProductDetail> products) {
+        Picks.Pick bestOverall = pickBestOverall(products);
+        Picks.Pick bestValue = pickBestValue(products);
+        Picks.Pick cheapest = pickCheapest(products);
+        if (bestOverall == null && bestValue == null && cheapest == null) {
+            return null;
+        }
+        return new Picks(bestOverall, bestValue, cheapest);
+    }
+
+    private Picks.Pick pickBestOverall(List<ProductDetail> products) {
+        return products.stream()
+                .filter(p -> p.rating() != null)
+                .min(Comparator
+                        .comparingDouble((ProductDetail p) -> -p.rating())
+                        .thenComparing(this::priceOrMax)
+                        .thenComparingLong(ProductDetail::id))
+                .map(p -> toPick(p, reasonOverall(p)))
+                .orElse(null);
+    }
+
+    private Picks.Pick pickBestValue(List<ProductDetail> products) {
+        return products.stream()
+                .filter(p -> p.rating() != null && priceOrNull(p) != null
+                        && priceOrNull(p).signum() > 0)
+                .min(Comparator
+                        .comparing((ProductDetail p) -> ratingPerPrice(p), Comparator.reverseOrder())
+                        .thenComparing((ProductDetail p) -> -p.rating())
+                        .thenComparingLong(ProductDetail::id))
+                .map(p -> toPick(p, reasonValue(p)))
+                .orElse(null);
+    }
+
+    private Picks.Pick pickCheapest(List<ProductDetail> products) {
+        return products.stream()
+                .filter(p -> priceOrNull(p) != null)
+                .min(Comparator
+                        .comparing((ProductDetail p) -> priceOrNull(p))
+                        .thenComparing((ProductDetail p) -> -ratingOrZero(p))
+                        .thenComparingLong(ProductDetail::id))
+                .map(p -> toPick(p, reasonCheapest(p)))
+                .orElse(null);
+    }
+
+    private Picks.Pick toPick(ProductDetail p, String reason) {
+        BuyBox b = p.buyBox();
+        return new Picks.Pick(
+                p.id(),
+                p.name(),
+                b == null ? null : b.price(),
+                b == null ? null : b.currency(),
+                p.rating(),
+                reason);
+    }
+
+    private BigDecimal priceOrNull(ProductDetail p) {
+        BuyBox b = p.buyBox();
+        return b == null ? null : b.price();
+    }
+
+    private BigDecimal priceOrMax(ProductDetail p) {
+        BigDecimal price = priceOrNull(p);
+        return price == null ? new BigDecimal("999999999999") : price;
+    }
+
+    private double ratingOrZero(ProductDetail p) {
+        return p.rating() == null ? 0.0 : p.rating();
+    }
+
+    private BigDecimal ratingPerPrice(ProductDetail p) {
+        BigDecimal price = priceOrNull(p);
+        if (price == null || price.signum() <= 0 || p.rating() == null) {
+            return BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(p.rating()).divide(price, 8, RoundingMode.HALF_UP);
+    }
+
+    private String reasonOverall(ProductDetail p) {
+        return String.format(Locale.ROOT, "rating %.1f", p.rating());
+    }
+
+    private String reasonValue(ProductDetail p) {
+        BigDecimal price = priceOrNull(p);
+        return String.format(Locale.ROOT, "rating %.1f at %s", p.rating(), price.toPlainString());
+    }
+
+    private String reasonCheapest(ProductDetail p) {
+        BigDecimal price = priceOrNull(p);
+        return "lowest price at " + price.toPlainString();
     }
 
     private enum Direction { HIGHER_BETTER, LOWER_BETTER, NONE }
