@@ -38,7 +38,7 @@ class CategoryInsightsServiceTest {
     void setUp() {
         productService = mock(ProductService.class);
         summaryService = mock(SummaryService.class);
-        when(summaryService.summariseCategoryInsights(any(), anyInt(), anyList(), anyList(), any(), any()))
+        when(summaryService.summariseCategoryInsights(any(), anyInt(), anyList(), anyList(), any(), any(), any()))
                 .thenReturn(Optional.empty());
         service = new CategoryInsightsService(productService, summaryService, AttributeMetadata.defaultRegistry());
     }
@@ -130,7 +130,7 @@ class CategoryInsightsServiceTest {
 
         ArgumentCaptor<Picks> picksCaptor = ArgumentCaptor.forClass(Picks.class);
         verify(summaryService).summariseCategoryInsights(
-                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
+                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any(), any());
 
         Picks picks = picksCaptor.getValue();
         assertThat(picks).isNotNull();
@@ -158,7 +158,7 @@ class CategoryInsightsServiceTest {
 
         ArgumentCaptor<Picks> picksCaptor = ArgumentCaptor.forClass(Picks.class);
         verify(summaryService).summariseCategoryInsights(
-                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
+                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any(), any());
 
         assertThat(picksCaptor.getValue()).isNull();
     }
@@ -174,7 +174,7 @@ class CategoryInsightsServiceTest {
 
         ArgumentCaptor<Picks> picksCaptor = ArgumentCaptor.forClass(Picks.class);
         verify(summaryService).summariseCategoryInsights(
-                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
+                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any(), any());
 
         Picks picks = picksCaptor.getValue();
         assertThat(picks.bestOverall().id()).isEqualTo(3L);
@@ -194,7 +194,7 @@ class CategoryInsightsServiceTest {
 
         ArgumentCaptor<Picks> picksCaptor = ArgumentCaptor.forClass(Picks.class);
         verify(summaryService).summariseCategoryInsights(
-                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
+                any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any(), any());
 
         Picks picks = picksCaptor.getValue();
         assertThat(picks.bestValue().id()).isEqualTo(2L);

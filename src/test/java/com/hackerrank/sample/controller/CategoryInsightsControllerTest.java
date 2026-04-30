@@ -36,7 +36,7 @@ class CategoryInsightsControllerTest {
     void happyPath_returns200WithRankings() throws Exception {
         CategoryInsightsResponse response = new CategoryInsightsResponse(
                 Category.SMARTPHONE, 3, List.of(), List.of(), "pt-BR", null, null);
-        when(insightsService.insights(eq(Category.SMARTPHONE), anyInt(), any(Language.class)))
+        when(insightsService.insights(eq(Category.SMARTPHONE), anyInt(), any(Language.class), any()))
                 .thenReturn(response);
 
         mockMvc.perform(get("/api/v1/products/category-insights?category=SMARTPHONE"))

@@ -3,10 +3,10 @@ package com.hackerrank.sample.controller;
 import com.hackerrank.sample.controller.api.CategoryInsightsApi;
 import com.hackerrank.sample.model.Category;
 import com.hackerrank.sample.model.Language;
-import com.hackerrank.sample.model.insights.AppliedFilters;
 import com.hackerrank.sample.model.insights.CategoryInsightsResponse;
 import com.hackerrank.sample.model.insights.InsightsFiltersRequest;
 import com.hackerrank.sample.service.insights.CategoryInsightsService;
+import com.hackerrank.sample.service.insights.InsightsFilters;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,18 +26,7 @@ public class CategoryInsightsController implements CategoryInsightsApi {
     public CategoryInsightsResponse categoryInsights(
             Category category, int topK, String language, InsightsFiltersRequest filters) {
         Language parsedLanguage = Language.fromTag(language);
-        CategoryInsightsResponse base = insightsService.insights(category, topK, parsedLanguage);
-        AppliedFilters applied = AppliedFilters.from(filters);
-        if (applied == null) {
-            return base;
-        }
-        return new CategoryInsightsResponse(
-                base.category(),
-                base.productCount(),
-                base.rankings(),
-                base.topItems(),
-                base.language(),
-                base.summary(),
-                applied);
+        InsightsFilters parsedFilters = InsightsFilters.from(filters);
+        return insightsService.insights(category, topK, parsedLanguage, parsedFilters);
     }
 }

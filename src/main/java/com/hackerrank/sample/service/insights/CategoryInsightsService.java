@@ -4,6 +4,7 @@ import com.hackerrank.sample.model.BuyBox;
 import com.hackerrank.sample.model.Category;
 import com.hackerrank.sample.model.Language;
 import com.hackerrank.sample.model.ProductDetail;
+import com.hackerrank.sample.model.insights.AppliedFilters;
 import com.hackerrank.sample.model.insights.CategoryInsightsResponse;
 import com.hackerrank.sample.model.insights.Coverage;
 import com.hackerrank.sample.model.insights.RankedItem;
@@ -56,7 +57,15 @@ public class CategoryInsightsService {
     }
 
     public CategoryInsightsResponse insights(Category category, int topK, Language language) {
-        List<ProductDetail> products = productService.getAllByCategory(category);
+        return insights(category, topK, language, null);
+    }
+
+    public CategoryInsightsResponse insights(
+            Category category, int topK, Language language, InsightsFilters filters) {
+        List<ProductDetail> all = productService.getAllByCategory(category);
+        List<ProductDetail> products = filters == null
+                ? all
+                : all.stream().filter(filters.asPredicate()).toList();
         int productCount = products.size();
 
         List<RankingEntry> rankings = productCount < 2
@@ -68,7 +77,11 @@ public class CategoryInsightsService {
         Optional<String> summary = productCount < 2
                 ? Optional.empty()
                 : summaryService.summariseCategoryInsights(
-                        category, productCount, rankings, topItems, picks, language);
+                        category, productCount, rankings, topItems, picks, filters, language);
+
+        AppliedFilters applied = filters == null
+                ? null
+                : new AppliedFilters(filters.minPrice(), filters.maxPrice(), filters.minRating());
 
         return new CategoryInsightsResponse(
                 category,
@@ -77,7 +90,7 @@ public class CategoryInsightsService {
                 topItems,
                 language.tag(),
                 summary.orElse(null),
-                null);
+                applied);
     }
 
     private List<RankingEntry> computeRankings(Category category, List<ProductDetail> products) {
