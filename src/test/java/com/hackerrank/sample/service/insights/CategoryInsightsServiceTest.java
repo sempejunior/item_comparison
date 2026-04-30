@@ -141,6 +141,10 @@ class CategoryInsightsServiceTest {
         assertThat(picks.bestValue().id()).isEqualTo(1L);
         assertThat(picks.bestOverall().reason()).contains("4.9");
         assertThat(picks.cheapest().reason()).containsIgnoringCase("lowest price");
+        assertThat(picks.bestOverall().highlights())
+                .contains("rating: 4.9", "battery: 5000 mAh");
+        assertThat(picks.cheapest().highlights())
+                .contains("price: 500");
     }
 
     @Test

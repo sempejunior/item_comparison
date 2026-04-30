@@ -58,8 +58,8 @@ public class SummaryService {
     static final String CACHE_NAME = "ai-summary";
     static final String CACHE_NAME_INSIGHTS = "ai-category-insights";
     static final String PROMPT_TEMPLATE = "compare-summary.v1.md";
-    static final String PROMPT_TEMPLATE_INSIGHTS = "category-insights.v2.md";
-    static final String PROMPT_VERSION_INSIGHTS = "v2";
+    static final String PROMPT_TEMPLATE_INSIGHTS = "category-insights.v3.md";
+    static final String PROMPT_VERSION_INSIGHTS = "v3";
     private static final String DISABLED_KEY = "disabled";
     private static final String OPENAI_KEY_ENV = "OPENAI_API_KEY";
 

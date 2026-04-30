@@ -1,7 +1,7 @@
 ---
 id: SPEC-005
 title: Category Insights
-version: v3
+version: v4
 status: Accepted
 last_updated: 2026-04-30
 depends_on: [SPEC-001, SPEC-002, SPEC-003, SPEC-004]
@@ -317,6 +317,21 @@ on `topItems` in v1 — projection is already lean).*
 
 ## 11. Changelog
 
+- **v4 (2026-04-30)** — Sharpened the buying-guide prompt after smoke
+  showed the v2 output sounded robotic ("o best overall é o..."). The
+  `Picks.Pick` record now carries a `highlights: List<String>` field
+  computed in `CategoryInsightsService` from the deterministic
+  `rankings[]` (each pick is tagged with the spec leaderships it owns,
+  e.g. `["memory: 26 GB", "storage: 1408 GB"]`). Prompt template
+  bumped to `category-insights.v3.md` with three few-shot examples
+  (pt-BR notebook, en smartphone, pt-BR refrigerator) and stricter
+  anti-hallucination rules: the LLM may only cite price, rating, and
+  the values inside `highlights`; the literal labels "best overall /
+  best value / cheapest" are forbidden in the prose; raw
+  "<label>: <value>" strings must be reworded into natural target-
+  language phrasing ("26 GB de memória" instead of "memory: 26 GB").
+  Cache key prefix bumped to `v3|...`. SPEC §5.4 FR-8/FR-9 updated;
+  no public schema change. v2 prompt removed.
 - **v3 (2026-04-30)** — Reframed the LLM `summary` from a neutral
   landscape description to a **buying guide** anchored on three
   deterministic picks (best overall, best value, cheapest) computed in

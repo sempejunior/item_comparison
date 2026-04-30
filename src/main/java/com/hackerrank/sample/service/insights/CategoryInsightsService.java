@@ -64,7 +64,7 @@ public class CategoryInsightsService {
                 : computeRankings(category, products);
         List<TopItem> topItems = pickTopItems(products, topK);
 
-        Picks picks = productCount < 2 ? null : computePicks(products);
+        Picks picks = productCount < 2 ? null : computePicks(products, rankings);
         Optional<String> summary = productCount < 2
                 ? Optional.empty()
                 : summaryService.summariseCategoryInsights(
@@ -243,28 +243,28 @@ public class CategoryInsightsService {
         return out;
     }
 
-    private Picks computePicks(List<ProductDetail> products) {
-        Picks.Pick bestOverall = pickBestOverall(products);
-        Picks.Pick bestValue = pickBestValue(products);
-        Picks.Pick cheapest = pickCheapest(products);
+    private Picks computePicks(List<ProductDetail> products, List<RankingEntry> rankings) {
+        Picks.Pick bestOverall = pickBestOverall(products, rankings);
+        Picks.Pick bestValue = pickBestValue(products, rankings);
+        Picks.Pick cheapest = pickCheapest(products, rankings);
         if (bestOverall == null && bestValue == null && cheapest == null) {
             return null;
         }
         return new Picks(bestOverall, bestValue, cheapest);
     }
 
-    private Picks.Pick pickBestOverall(List<ProductDetail> products) {
+    private Picks.Pick pickBestOverall(List<ProductDetail> products, List<RankingEntry> rankings) {
         return products.stream()
                 .filter(p -> p.rating() != null)
                 .min(Comparator
                         .comparingDouble((ProductDetail p) -> -p.rating())
                         .thenComparing(this::priceOrMax)
                         .thenComparingLong(ProductDetail::id))
-                .map(p -> toPick(p, reasonOverall(p)))
+                .map(p -> toPick(p, reasonOverall(p), rankings))
                 .orElse(null);
     }
 
-    private Picks.Pick pickBestValue(List<ProductDetail> products) {
+    private Picks.Pick pickBestValue(List<ProductDetail> products, List<RankingEntry> rankings) {
         return products.stream()
                 .filter(p -> p.rating() != null && priceOrNull(p) != null
                         && priceOrNull(p).signum() > 0)
@@ -272,22 +272,22 @@ public class CategoryInsightsService {
                         .comparing((ProductDetail p) -> ratingPerPrice(p), Comparator.reverseOrder())
                         .thenComparing((ProductDetail p) -> -p.rating())
                         .thenComparingLong(ProductDetail::id))
-                .map(p -> toPick(p, reasonValue(p)))
+                .map(p -> toPick(p, reasonValue(p), rankings))
                 .orElse(null);
     }
 
-    private Picks.Pick pickCheapest(List<ProductDetail> products) {
+    private Picks.Pick pickCheapest(List<ProductDetail> products, List<RankingEntry> rankings) {
         return products.stream()
                 .filter(p -> priceOrNull(p) != null)
                 .min(Comparator
                         .comparing((ProductDetail p) -> priceOrNull(p))
                         .thenComparing((ProductDetail p) -> -ratingOrZero(p))
                         .thenComparingLong(ProductDetail::id))
-                .map(p -> toPick(p, reasonCheapest(p)))
+                .map(p -> toPick(p, reasonCheapest(p), rankings))
                 .orElse(null);
     }
 
-    private Picks.Pick toPick(ProductDetail p, String reason) {
+    private Picks.Pick toPick(ProductDetail p, String reason, List<RankingEntry> rankings) {
         BuyBox b = p.buyBox();
         return new Picks.Pick(
                 p.id(),
@@ -295,7 +295,31 @@ public class CategoryInsightsService {
                 b == null ? null : b.price(),
                 b == null ? null : b.currency(),
                 p.rating(),
-                reason);
+                reason,
+                highlightsFor(p, rankings));
+    }
+
+    private List<String> highlightsFor(ProductDetail p, List<RankingEntry> rankings) {
+        List<String> out = new ArrayList<>();
+        for (RankingEntry r : rankings) {
+            if (!r.isComparable() || r.winner() == null) {
+                continue;
+            }
+            if (r.winner().id() != null && r.winner().id().equals(p.id())) {
+                out.add(highlightLabel(r.path()) + ": " + r.winner().value());
+            }
+        }
+        return out;
+    }
+
+    private String highlightLabel(String path) {
+        if ("buyBox.price".equals(path)) {
+            return "price";
+        }
+        if (path.startsWith("attributes.")) {
+            return path.substring("attributes.".length());
+        }
+        return path;
     }
 
     private BigDecimal priceOrNull(ProductDetail p) {

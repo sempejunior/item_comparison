@@ -201,24 +201,29 @@ class SummaryServiceTest {
     }
 
     @Test
-    void categoryInsightsWithPicksRendersV2PromptAndCachesPerVersion() {
+    void categoryInsightsWithPicksRendersV3PromptAndCachesPerVersion() {
         AtomicInteger calls = new AtomicInteger();
         when(chatModel.call(any(Prompt.class))).thenAnswer(inv -> {
             Prompt prompt = inv.getArgument(0);
             String text = prompt.getInstructions().get(0).getContent();
-            assertThat(text).contains("buying-guide assistant");
+            assertThat(text).contains("buying-guide writer");
             assertThat(text).contains("\"bestOverall\"");
             assertThat(text).contains("\"cheapest\"");
             assertThat(text).contains("Premium Phone");
+            assertThat(text).contains("\"highlights\"");
+            assertThat(text).contains("memory: 8 GB");
             calls.incrementAndGet();
             return chatResponse("guia de compra", 100L, 50L);
         });
         SummaryService service = service(() -> "sk-real");
 
         Picks picks = new Picks(
-                new Picks.Pick(3L, "Premium Phone", new BigDecimal("3000"), "BRL", 4.9, "rating 4.9"),
-                new Picks.Pick(1L, "Cheap Phone", new BigDecimal("500"), "BRL", 4.0, "rating 4.0 at 500"),
-                new Picks.Pick(1L, "Cheap Phone", new BigDecimal("500"), "BRL", 4.0, "lowest price at 500"));
+                new Picks.Pick(3L, "Premium Phone", new BigDecimal("3000"), "BRL", 4.9,
+                        "rating 4.9", List.of("rating: 4.9", "memory: 8 GB")),
+                new Picks.Pick(1L, "Cheap Phone", new BigDecimal("500"), "BRL", 4.0,
+                        "rating 4.0 at 500", List.of("price: 500")),
+                new Picks.Pick(1L, "Cheap Phone", new BigDecimal("500"), "BRL", 4.0,
+                        "lowest price at 500", List.of("price: 500")));
 
         Optional<String> first = service.summariseCategoryInsights(
                 Category.SMARTPHONE, 3, List.<RankingEntry>of(), List.<TopItem>of(), picks, Language.PT_BR);
