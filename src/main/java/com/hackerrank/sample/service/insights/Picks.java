@@ -16,7 +16,10 @@ import java.util.List;
  * the corresponding pick.</p>
  *
  * @param bestOverall highest rating; ties broken by lower price then id
- * @param bestValue   highest {@code rating / price}; ties by higher rating then id
+ * @param bestValue   highest {@code rating / price} restricted to items
+ *                    rated at or above {@code max(4.0, category median)};
+ *                    falls back to all priced items when the well-rated set
+ *                    is empty. Ties by higher rating then id.
  * @param cheapest    lowest price; ties by higher rating then id
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)

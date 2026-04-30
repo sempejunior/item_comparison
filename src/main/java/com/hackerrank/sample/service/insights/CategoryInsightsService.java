@@ -265,15 +265,39 @@ public class CategoryInsightsService {
     }
 
     private Picks.Pick pickBestValue(List<ProductDetail> products, List<RankingEntry> rankings) {
-        return products.stream()
-                .filter(p -> p.rating() != null && priceOrNull(p) != null
-                        && priceOrNull(p).signum() > 0)
+        double ratingFloor = bestValueRatingFloor(products);
+        List<ProductDetail> wellRated = products.stream()
+                .filter(p -> p.rating() != null && p.rating() >= ratingFloor
+                        && priceOrNull(p) != null && priceOrNull(p).signum() > 0)
+                .toList();
+        List<ProductDetail> pool = wellRated.isEmpty()
+                ? products.stream()
+                        .filter(p -> p.rating() != null && priceOrNull(p) != null
+                                && priceOrNull(p).signum() > 0)
+                        .toList()
+                : wellRated;
+        return pool.stream()
                 .min(Comparator
                         .comparing((ProductDetail p) -> ratingPerPrice(p), Comparator.reverseOrder())
                         .thenComparing((ProductDetail p) -> -p.rating())
                         .thenComparingLong(ProductDetail::id))
                 .map(p -> toPick(p, reasonValue(p), rankings))
                 .orElse(null);
+    }
+
+    private double bestValueRatingFloor(List<ProductDetail> products) {
+        double[] ratings = products.stream()
+                .filter(p -> p.rating() != null)
+                .mapToDouble(ProductDetail::rating)
+                .sorted()
+                .toArray();
+        if (ratings.length == 0) {
+            return 0.0;
+        }
+        double median = ratings.length % 2 == 1
+                ? ratings[ratings.length / 2]
+                : (ratings[ratings.length / 2 - 1] + ratings[ratings.length / 2]) / 2.0;
+        return Math.max(4.0, median);
     }
 
     private Picks.Pick pickCheapest(List<ProductDetail> products, List<RankingEntry> rankings) {

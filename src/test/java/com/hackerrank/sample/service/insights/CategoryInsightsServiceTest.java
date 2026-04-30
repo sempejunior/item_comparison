@@ -138,7 +138,7 @@ class CategoryInsightsServiceTest {
         assertThat(picks.bestOverall().rating()).isEqualTo(4.9);
         assertThat(picks.cheapest().id()).isEqualTo(1L);
         assertThat(picks.cheapest().price()).isEqualByComparingTo("500");
-        assertThat(picks.bestValue().id()).isEqualTo(1L);
+        assertThat(picks.bestValue().id()).isEqualTo(2L);
         assertThat(picks.bestOverall().reason()).contains("4.9");
         assertThat(picks.cheapest().reason()).containsIgnoringCase("lowest price");
         assertThat(picks.bestOverall().highlights())
@@ -197,7 +197,7 @@ class CategoryInsightsServiceTest {
                 any(), anyInt(), anyList(), anyList(), picksCaptor.capture(), any());
 
         Picks picks = picksCaptor.getValue();
-        assertThat(picks.bestValue().id()).isEqualTo(3L);
+        assertThat(picks.bestValue().id()).isEqualTo(2L);
         assertThat(picks.bestOverall().id()).isEqualTo(1L);
         assertThat(picks.cheapest().id()).isEqualTo(3L);
     }
