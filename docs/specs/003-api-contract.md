@@ -2,7 +2,7 @@
 id: SPEC-003
 title: API Contract
 version: v4
-status: Draft
+status: Accepted
 last_updated: 2026-04-29
 depends_on: [SPEC-001, SPEC-002]
 ---

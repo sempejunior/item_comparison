@@ -2,7 +2,7 @@
 id: ROADMAP
 title: Production scaling and next bets
 version: v5
-status: Draft
+status: Accepted
 last_updated: 2026-04-30
 ---
 
