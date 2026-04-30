@@ -1,7 +1,7 @@
 ---
 id: SPEC-001
 title: Item Comparison API
-version: v6
+version: v7
 status: Draft
 last_updated: 2026-04-29
 ---
@@ -81,6 +81,16 @@ Serve normalized catalog data so a frontend can:
   `imageUrl`, `rating`, `category`, `attributes` (flexible map), and an
   `offers` list. The current best offer is precomputed as `buyBox` and is
   the default representation in compare responses.
+- **FR-5a — Rating shape.** `rating` is a single scalar `Double` in
+  `[0.0, 5.0]`, rounded to two decimals at the source (seed/persistence)
+  to keep payloads stable across runs. It is **not** an object. A
+  `{ average, count }` shape was considered (review-confidence signal)
+  and explicitly cut from v1: the challenge prompt does not require
+  review counts, the seed is synthetic so `count` would carry no signal,
+  and inflating the type would ripple through three records, the entity,
+  the projector, the seed, and the LLM golden test for marginal value.
+  The richer shape is captured in `roadmap.md` for a future iteration
+  where real review data is available.
 - **FR-6** — Each offer carries: `sellerId`, `sellerName`,
   `sellerReputation`, `price`, `currency`, `condition` (NEW | USED |
   REFURBISHED), `freeShipping`, `stock`.
@@ -250,6 +260,16 @@ differentiators in `differences[]`).*
 
 ## 11. Changelog
 
+- **v7 (2026-04-29)** — Locked `rating` shape to a scalar `Double` in
+  `[0.0, 5.0]` via FR-5a. A prior internal note had floated a
+  `{ average, count }` object; that was cut from v1 because the
+  challenge prompt does not require review counts, the seed is
+  synthetic so `count` would carry no signal, and the richer shape
+  would inflate three records, the entity, the projector, the seed,
+  and the LLM golden test for marginal value. SPEC-002 already
+  documents the scalar shape (§4 INV-3). Added a roadmap pointer for
+  the richer shape when real review data is available. SPEC-003 v4
+  reflects the same lock with an explicit note in §3.
 - **v6 (2026-04-29)** — Cross-category compare semantics formalized.
   Added FR-7a (attribute intersection scope when `fields` does not pin
   attribute paths; sparse selection overrides intersection) and FR-7b

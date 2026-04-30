@@ -2,7 +2,7 @@
 id: SPEC-004
 title: AI Features
 version: v3
-status: Draft
+status: Accepted
 last_updated: 2026-04-29
 depends_on: [SPEC-001, SPEC-003]
 ---
@@ -50,7 +50,7 @@ flowchart LR
 | `spring.ai.openai.api-key`  | `${OPENAI_API_KEY:}`  | empty disables the LLM (deterministic mode)    |
 | `spring.ai.openai.chat.options.model` | `gpt-5.4-nano` | nano tier; quality is fine for a ≤ 60-word factual paragraph |
 | `spring.ai.openai.chat.options.temperature` | `0.2`   | low — we want stable, factual prose            |
-| `app.ai.timeout-ms`         | `2000`                | hard cap; exceeded = fallback                  |
+| `app.ai.timeout-ms`         | `3500`                | hard cap; exceeded = fallback (raised from 2000ms after OBS-8 — cold OpenAI calls in `en` consistently breached 2s) |
 | `app.ai.daily-request-limit`| `0` (disabled)        | optional cost guard                            |
 | `app.ai.cache.maximum-size` | `1000`                | Caffeine entries                               |
 | `app.ai.cache.ttl-minutes`  | `60`                  | inferences are stable; refresh hourly          |

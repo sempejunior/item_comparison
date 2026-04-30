@@ -78,6 +78,59 @@ class ProductControllerTest {
     }
 
     @Test
+    void getById_withFields_appliesSparseProjection() throws Exception {
+        BuyBox bb = new BuyBox(101L, "MELI-A1", "TechMarket", 5,
+                new BigDecimal("4899.00"), "BRL", Condition.NEW, true, 12);
+        ProductDetail detail = new ProductDetail(
+                1L, "Galaxy S24", "Flagship", "img.jpg", 4.6,
+                Category.SMARTPHONE, Map.of("memory", "8 GB", "battery", "4000 mAh"),
+                List.of(), bb);
+        when(productService.getById(1L)).thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/products/1").param("fields", "name,buyBox.price"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.name").value("Galaxy S24"))
+                .andExpect(jsonPath("$.buyBox.price").value(4899.00))
+                .andExpect(jsonPath("$.buyBox.currency").doesNotExist())
+                .andExpect(jsonPath("$.description").doesNotExist())
+                .andExpect(jsonPath("$.attributes").doesNotExist())
+                .andExpect(jsonPath("$.offers").doesNotExist());
+    }
+
+    @Test
+    void getById_withFieldsAttributes_returnsOnlyRequestedAttribute() throws Exception {
+        BuyBox bb = new BuyBox(101L, "MELI-A1", "TechMarket", 5,
+                new BigDecimal("4899.00"), "BRL", Condition.NEW, true, 12);
+        ProductDetail detail = new ProductDetail(
+                1L, "Galaxy S24", "Flagship", "img.jpg", 4.6,
+                Category.SMARTPHONE, Map.of("memory", "8 GB", "battery", "4000 mAh"),
+                List.of(), bb);
+        when(productService.getById(1L)).thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/products/1").param("fields", "attributes.battery"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.attributes.battery").value("4000 mAh"))
+                .andExpect(jsonPath("$.attributes.memory").doesNotExist())
+                .andExpect(jsonPath("$.name").doesNotExist());
+    }
+
+    @Test
+    void getById_withInvalidFields_returns400() throws Exception {
+        BuyBox bb = new BuyBox(101L, "MELI-A1", "TechMarket", 5,
+                new BigDecimal("4899.00"), "BRL", Condition.NEW, true, 12);
+        ProductDetail detail = new ProductDetail(
+                1L, "Galaxy S24", "Flagship", "img.jpg", 4.6,
+                Category.SMARTPHONE, Map.of(), List.of(), bb);
+        when(productService.getById(1L)).thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/products/1").param("fields", "name.bogus"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://api.example.com/errors/bad-request"));
+    }
+
+    @Test
     void getById_returns404RFC7807WhenMissing() throws Exception {
         when(productService.getById(99L)).thenThrow(new ProductNotFoundException(99L));
 

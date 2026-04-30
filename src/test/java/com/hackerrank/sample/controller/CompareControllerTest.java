@@ -7,7 +7,9 @@ import com.hackerrank.sample.model.Category;
 import com.hackerrank.sample.model.Condition;
 import com.hackerrank.sample.model.ProductDetail;
 import com.hackerrank.sample.service.ProductService;
+import com.hackerrank.sample.service.ai.SummaryService;
 import com.hackerrank.sample.service.compare.CompareService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -18,7 +20,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -34,6 +39,14 @@ class CompareControllerTest {
 
     @MockBean
     private ProductService productService;
+
+    @MockBean
+    private SummaryService summaryService;
+
+    @BeforeEach
+    void summaryReturnsEmptyByDefault() {
+        when(summaryService.summarise(anyList(), anyList(), any())).thenReturn(Optional.empty());
+    }
 
     private static ProductDetail product(long id, BigDecimal price, String battery) {
         return new ProductDetail(id, "P" + id, "d", "img", 4.0, Category.SMARTPHONE,

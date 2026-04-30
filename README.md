@@ -1,120 +1,217 @@
 # Item Comparison API — Mercado Livre Challenge
 
 Backend RESTful para a feature de comparação de produtos descrita no
-desafio *Item Comparison V2* do Mercado Livre. Este repositório está em
-construção ativa; o que está presente reflete a **fase de especificação**
-do projeto, antes da implementação propriamente dita.
+desafio *Item Comparison V2* do Mercado Livre. A API expõe três operações
+de leitura sobre um catálogo simulado, com cálculo determinístico de
+diferenças entre produtos e um resumo opcional em linguagem natural
+gerado por LLM (com fallback silencioso quando indisponível).
 
-> Status atual: **specs aprovadas, implementação em andamento.** O
-> trilho de tasks atômicas está em
-> [`docs/TASKS.md`](./docs/TASKS.md); o histórico de commits no `main`
-> reflete o progresso real.
+## TL;DR para o avaliador
 
-## Visão geral
+```bash
+mvn spring-boot:run                                  # sobe em :8080
+open http://localhost:8080/swagger-ui.html           # contrato interativo
+curl 'http://localhost:8080/api/v1/products/compare?ids=1,2'
+```
 
-A API expõe três operações de leitura sobre um catálogo simulado:
+Sem `OPENAI_API_KEY`, todos os endpoints funcionam normalmente — o campo
+`summary` simplesmente é omitido na resposta de `/compare`. Com a chave
+configurada (via `.env` ou variável de ambiente), o `summary` é populado
+em &lt; 3 s na primeira chamada e &lt; 200 ms em cache hit.
 
-1. **Detalhes de um produto** — `GET /api/v1/products/{id}` com sparse
-   fieldsets opcionais.
-2. **Comparação de N produtos (2 a 10)** — `GET /api/v1/products/compare`
-   com cálculo determinístico de diferenças e *summary* opcional em
-   linguagem natural via LLM, com fallback silencioso quando o LLM não
-   está disponível.
-3. **Listagem com paginação** — `GET /api/v1/products` para alimentar
-   pickers de UI.
+## Endpoints
 
-O modelo de domínio adota a abstração **`CatalogProduct + Offer`** que
-o Mercado Livre real usa: um produto canônico com N ofertas (uma por
-seller) e um *buy-box* derivado deterministicamente. Os campos do
-desafio (`size`, `weight`, `color`, `battery`, `camera`, etc.) vivem
-em um mapa flexível `attributes`, permitindo categorias específicas
-(smartphone, livro, geladeira) sem combinatorial class explosion.
+| Método | Path                                       | Descrição                                         |
+|--------|--------------------------------------------|---------------------------------------------------|
+| GET    | `/api/v1/products`                         | Listagem paginada (`page`, `size`, `category`).   |
+| GET    | `/api/v1/products/{id}`                    | Detalhe completo + `buyBox`. Aceita `fields=...`. |
+| GET    | `/api/v1/products/compare?ids=...`         | Compara 2-10 produtos. Aceita `fields`, `language`. |
+
+Erros seguem [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807)
+com slugs `validation`, `bad-request`, `not-found`,
+`products-not-found`, `method-not-allowed` e `internal`. Exemplos
+completos em [`docs/specs/003-api-contract.md`](./docs/specs/003-api-contract.md).
 
 ## Stack
 
-- **Java 21** + **Spring Boot 3.3.5** + **Maven**
+- **Java 21** + **Spring Boot 3.3.5** + **Maven 3.9+**
 - **H2 in-memory** (modo PostgreSQL) com **Spring Data JPA**
 - **Caffeine** para cache de produtos e respostas LLM
-- **Spring AI** abstraindo OpenAI (chat) — *somente para o `summary`
-  opcional; ausência de chave gera fallback determinístico*
-- **springdoc-openapi** → Swagger UI em `/swagger-ui.html`
-- **Spring Boot Actuator** + Micrometer
+- **Spring AI** abstraindo OpenAI — apenas o `summary` opcional
+- **springdoc-openapi 2.6** → Swagger UI em `/swagger-ui.html`
+- **Spring Boot Actuator** + Micrometer para métricas
 - **JUnit 5** + **AssertJ** + **MockMvc**, cobertura via **JaCoCo** ≥ 80 %
 
-## Como construímos isto: Spec-Driven Development
+## Como rodar
 
-O diferencial deste projeto é o método. Em vez de pular para código, o
-trabalho seguiu — e seguirá — um trilho explícito de SDD:
+### Requisitos
+- JDK 21 (`java -version` reporta 21)
+- Maven 3.9+ (`mvn -version`)
+
+### Subir a aplicação
+
+```bash
+mvn spring-boot:run
+```
+
+A porta padrão é `8080`. Se já estiver ocupada (por ex. WireMock root),
+use `SERVER_PORT=8081 mvn spring-boot:run`. O boot leva &lt; 10 s em
+hardware moderno.
+
+Para empacotar e rodar como jar:
+
+```bash
+mvn -DskipTests package
+java -jar target/sample-1.0.0.jar
+```
+
+### Habilitar o `summary` LLM
+
+Copie o template e preencha a chave:
+
+```bash
+cp .env.example .env
+# edite .env e defina OPENAI_API_KEY=sk-...
+```
+
+Spring Boot carrega `OPENAI_API_KEY` do ambiente; o fluxo padrão é
+exportar a variável no shell ou usar uma ferramenta como `direnv`. Sem a
+chave, o serviço passa para o fallback determinístico
+(documentado em [SPEC-004 §6](./docs/specs/004-ai-features.md)).
+
+### Rodar a suíte de testes + cobertura
+
+```bash
+mvn verify
+open target/site/jacoco/index.html
+```
+
+## Como avaliar (sugestão)
+
+1. **Swagger UI** — `http://localhost:8080/swagger-ui.html` cobre os três
+   endpoints com exemplos de request, schema de resposta e exemplos de
+   erro RFC 7807.
+2. **Smoke por curl** — comandos prontos abaixo cobrem happy path,
+   sparse fields, cross-category e os principais fluxos de erro.
+3. **Métricas** — `GET /actuator/metrics/ai_calls_total` mostra
+   `outcome=ok|cache_hit|timeout|error` e `GET /actuator/metrics/ai_fallback_total`
+   detalha os motivos de fallback (sem chave, budget exausto, etc.).
+4. **Documentação SDD** — `docs/` traz o trilho completo de
+   especificações, ADRs, plano e tasks. Ordem sugerida em
+   [Trilho de leitura](#trilho-de-leitura-sdd).
+
+### Curl rápidos
+
+```bash
+# listagem default (page=0, size=3)
+curl 'http://localhost:8080/api/v1/products'
+
+# filtro por categoria
+curl 'http://localhost:8080/api/v1/products?category=SMARTPHONE&size=10'
+
+# detalhe completo
+curl 'http://localhost:8080/api/v1/products/1'
+
+# detalhe com sparse fields (só nome e preço do buyBox)
+curl 'http://localhost:8080/api/v1/products/1?fields=name,buyBox.price'
+
+# compare happy path (mesma categoria)
+curl 'http://localhost:8080/api/v1/products/compare?ids=1,2'
+
+# compare cross-category (interseção de attributes + exclusiveAttributes)
+curl 'http://localhost:8080/api/v1/products/compare?ids=1,21'
+
+# compare em inglês
+curl 'http://localhost:8080/api/v1/products/compare?ids=1,2&language=en'
+
+# erros típicos
+curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,1'      # 400 duplicates
+curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,9999'   # 404 products-not-found
+curl -i 'http://localhost:8080/api/v1/products/compare'              # 400 validation
+curl -i -X POST 'http://localhost:8080/api/v1/products/compare?ids=1,2'  # 405
+```
+
+## Decisões arquiteturais de destaque
+
+- **`CatalogProduct + Offer`** em vez de `Product` simples — espelha o
+  modelo real do Mercado Livre. Detalhes em
+  [SPEC-002 §1–§3](./docs/specs/002-product-domain-model.md).
+- **`buyBox` derivado deterministicamente** por tier (NEW &gt;
+  REFURBISHED &gt; USED), preço ascendente, reputação descendente,
+  `sellerId` lexicográfico — ver
+  [ADR-0004](./docs/adrs/0004-buybox-selection-heuristic.md).
+- **Comparação híbrida**: camada determinística (`differences[]`) sempre
+  presente; camada LLM (`summary`) opcional, com timeout 3.5 s, cache
+  Caffeine de 5 min e fallback silencioso quando indisponível.
+  [SPEC-001 §5.2](./docs/specs/001-item-comparison.md),
+  [SPEC-004 §6](./docs/specs/004-ai-features.md).
+- **`differences[]` em forma enxuta** — apenas atributos que diferem,
+  com `winnerId` quando comparável numericamente.
+  [SPEC-003 §2.3](./docs/specs/003-api-contract.md).
+- **Cross-category compare** — `differences[]` opera sobre interseção de
+  attribute keys; exclusivos vão para `exclusiveAttributes` e a flag
+  `crossCategory: true` sinaliza o caso ao consumidor.
+- **Skeleton de pacotes do desafio é fixo** (`controller / service /
+  repository / model / exception`); a qualidade interna respeita esse
+  layout — ver [ADR-0003](./docs/adrs/0003-keep-skeleton-paste-friendly-submission.md).
+- **Busca semântica fora do escopo v1**, deliberadamente. O desafio
+  pede *comparação*, não *busca*. A pipeline RAG completa (embeddings,
+  vector store, outbox/Kafka, blue-green de modelos) está descrita com
+  o mesmo rigor em [`docs/roadmap.md`](./docs/roadmap.md) §R-2.
+
+## Fluxo do `/compare`
+
+```mermaid
+flowchart TB
+  Client[Client] -->|GET /compare?ids=...| Ctrl[CompareController]
+  Ctrl -->|validate ids| Svc[CompareService]
+  Svc -->|getById x N| PSvc[ProductService]
+  PSvc -->|cache| Cache[(Caffeine 'products')]
+  PSvc -->|miss| Repo[ProductRepository → H2]
+  Svc -->|derive| BuyBox[BuyBoxSelector]
+  Svc -->|compute| Diffs[DifferencesCalculator]
+  Svc -->|fields=?| Proj[FieldSetProjector]
+  Svc -->|optional| Sum[SummaryService]
+  Sum -->|cache| AICache[(Caffeine 'ai-summary')]
+  Sum -->|miss| LLM[(OpenAI ChatClient)]
+  Sum -.->|timeout/no key/budget| Fallback[fallback: omit summary]
+  Sum --> Metrics[(Micrometer<br/>ai_calls_total<br/>ai_fallback_total)]
+  Svc --> Resp[CompareResponse]
+  Resp --> Client
+```
+
+Pontos-chave:
+
+- O LLM **nunca** está no caminho crítico de correção — uma falha do
+  modelo apenas omite o `summary`, todo o resto da resposta permanece.
+- `BuyBoxSelector` e `DifferencesCalculator` são funções puras
+  testáveis em isolamento (golden tests em `src/test/`).
+- Cache de produtos e cache de inferência são separados; o cache de
+  inferência é chaveado por hash de `(ids, language, prompt version)`.
+
+## Trilho de leitura SDD
+
+Este projeto foi construído com **Spec-Driven Development**:
 
 ```
 SPECIFY  →  PLAN  →  DECIDE (ADRs)  →  TASKS  →  IMPLEMENT  →  VERIFY  →  EVOLVE
 ```
 
-Cada fase só começa com a anterior aprovada. Mudanças encontradas durante
-a implementação retornam para a spec, são re-versionadas, e re-fluem.
-Documentos não são retrofitados.
+Cada fase só começou com a anterior aprovada. Mudanças encontradas
+durante a implementação retornam para a spec, são re-versionadas e
+re-fluem — documentos não são retrofitados.
 
-A pasta [`docs/`](./docs/) contém o trilho completo. A ordem de leitura
-recomendada para um avaliador é:
+Ordem sugerida para auditoria:
 
 1. [`docs/README.md`](./docs/README.md) — metodologia e índice
-2. [`docs/specs/001-item-comparison.md`](./docs/specs/001-item-comparison.md)
-   — *o que* e *por que*
-3. [`docs/specs/002-product-domain-model.md`](./docs/specs/002-product-domain-model.md)
-   — modelo de dados e invariantes
-4. [`docs/specs/003-api-contract.md`](./docs/specs/003-api-contract.md)
-   — contrato HTTP, RFC 7807, exemplos curl
-5. [`docs/specs/004-ai-features.md`](./docs/specs/004-ai-features.md)
-   — política de fallback, métricas, prompt versionado
-6. [`docs/roadmap.md`](./docs/roadmap.md) — evolução para produção
-   (busca semântica, embeddings em escala, hybrid retrieval,
-   resilience/SLO, multi-region)
-
-## Decisões arquiteturais de destaque
-
-- **`CatalogProduct + Offer`** em vez de `Product` simples. Decisão
-  detalhada em SPEC-002 §1–§3.
-- **Comparação híbrida**: camada determinística (`differences[]`) sempre
-  presente; camada LLM (`summary`) opcional com timeout 2 s, cache, e
-  fallback silencioso. SPEC-001 §5.2, SPEC-004 §6.
-- **`differences[]` em forma enxuta** — apenas atributos que diferem,
-  com `winnerId` quando comparável. SPEC-003 §2.3.
-- **Busca semântica fora do escopo v1**, deliberadamente. O desafio
-  pede *comparação*, não *busca*. A pipeline RAG completa
-  (embeddings + vector store + LLM rerank + escala via outbox/Kafka)
-  está descrita com o mesmo rigor no roadmap (R-2.0 → R-2.5, R-3),
-  sinalizando consciência sem overreach. Veja
-  [`docs/roadmap.md`](./docs/roadmap.md) §R-2.
-- **Layered architecture** respeitando o esqueleto fixo do desafio
-  (`controller / service / repository / model / exception`); zero
-  lógica de negócio em controllers; Bean Validation em DTOs;
-  `BuyBoxSelector` e `DifferencesCalculator` como funções puras
-  testáveis em isolamento.
-
-## Como rodar (uma vez implementado)
-
-```bash
-# build + testes + cobertura
-mvn verify
-
-# subir a aplicação
-mvn spring-boot:run
-
-# documentação interativa
-open http://localhost:8080/swagger-ui.html
-```
-
-A aplicação boota em < 10 s sem chave OpenAI. Para ativar o `summary`
-LLM:
-
-```bash
-export OPENAI_API_KEY=sk-...
-mvn spring-boot:run
-```
-
-A ausência da chave **não** quebra nenhum endpoint — apenas o campo
-`summary` deixa de aparecer em respostas de comparação, conforme
-documentado no contrato.
+2. [`docs/specs/001-item-comparison.md`](./docs/specs/001-item-comparison.md) — *o que* e *por que*
+3. [`docs/specs/002-product-domain-model.md`](./docs/specs/002-product-domain-model.md) — modelo de dados e invariantes
+4. [`docs/specs/003-api-contract.md`](./docs/specs/003-api-contract.md) — contrato HTTP, RFC 7807, exemplos
+5. [`docs/specs/004-ai-features.md`](./docs/specs/004-ai-features.md) — política de fallback, métricas, prompt versionado
+6. [`docs/adrs/`](./docs/adrs/) — quatro decisões arquiteturais com contexto, alternativas e consequências
+7. [`docs/plan.md`](./docs/plan.md) — sequência de implementação por slices funcionais
+8. [`docs/TASKS.md`](./docs/TASKS.md) — tasks atômicas (T-01..T-23) com Definition of Done
+9. [`docs/roadmap.md`](./docs/roadmap.md) — evolução para produção (R-1..R-8)
 
 ## Estrutura do repositório
 
@@ -122,22 +219,27 @@ documentado no contrato.
 .
 ├── README.md                    este arquivo
 ├── pom.xml                      Spring Boot 3.3.5, Java 21
+├── .env.example                 template para OPENAI_API_KEY
 ├── docs/
 │   ├── README.md                metodologia SDD
 │   ├── specs/                   SPEC-001..004
-│   └── roadmap.md               evolução para produção
+│   ├── adrs/                    ADR-0001..0004
+│   ├── plan.md                  sequência de slices
+│   ├── TASKS.md                 tasks atômicas
+│   └── roadmap.md               R-1..R-8
 └── src/
     ├── main/
     │   ├── java/com/hackerrank/sample/
     │   │   ├── Application.java
-    │   │   ├── controller/
-    │   │   ├── exception/
-    │   │   ├── model/
-    │   │   ├── repository/
-    │   │   └── service/
+    │   │   ├── controller/      ProductController, CompareController
+    │   │   ├── exception/       GlobalExceptionHandler (RFC 7807)
+    │   │   ├── model/           CatalogProduct, Offer, DTOs
+    │   │   ├── repository/      ProductRepository (Spring Data JPA)
+    │   │   └── service/         ProductService, CompareService,
+    │   │                        BuyBoxSelector, DifferencesCalculator,
+    │   │                        SummaryService, FieldSetProjector
     │   └── resources/
     │       ├── application.yml
-    │       ├── seed/catalog.json
     │       └── prompts/compare-summary.v1.md
     └── test/                    espelho da estrutura de main/
 ```
@@ -156,3 +258,7 @@ documentado no contrato.
 | Multi-tenant / per-vertical prompts             | roadmap R-4           |
 
 A omissão é deliberada e rastreada — não é dívida silenciosa.
+
+## Licença
+
+MIT — ver cabeçalho em `OpenApiConfig`.

@@ -10,19 +10,32 @@ import com.hackerrank.sample.model.Condition;
 import com.hackerrank.sample.model.Language;
 import com.hackerrank.sample.model.ProductDetail;
 import com.hackerrank.sample.service.ProductService;
+import com.hackerrank.sample.service.ai.SummaryService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class CompareServiceTest {
+
+    private static final SummaryService NO_OP_SUMMARY = noOpSummary();
+
+    private static SummaryService noOpSummary() {
+        SummaryService stub = mock(SummaryService.class);
+        when(stub.summarise(anyList(), anyList(), any())).thenReturn(Optional.empty());
+        return stub;
+    }
 
     private static ProductDetail product(long id, BigDecimal price) {
         return new ProductDetail(id, "P" + id, "d", "img", 4.0, Category.SMARTPHONE,
@@ -36,7 +49,7 @@ class CompareServiceTest {
         ProductService ps = mock(ProductService.class);
         when(ps.getById(eq(1L))).thenReturn(product(1L, new BigDecimal("4000")));
         when(ps.getById(eq(2L))).thenReturn(product(2L, new BigDecimal("5000")));
-        CompareService svc = new CompareService(ps);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
 
         CompareResponse out = svc.compare(List.of(1L, 2L), null, Language.PT_BR);
 
@@ -62,7 +75,7 @@ class CompareServiceTest {
         ProductService ps = mock(ProductService.class);
         when(ps.getById(eq(1L))).thenReturn(phone);
         when(ps.getById(eq(21L))).thenReturn(laptop);
-        CompareService svc = new CompareService(ps);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
 
         CompareResponse out = svc.compare(List.of(1L, 21L), null, Language.PT_BR);
 
@@ -73,28 +86,59 @@ class CompareServiceTest {
     }
 
     @Test
-    void duplicateIdsAreDeduped_orderPreserved() {
+    void nullIdInList_throwsInvalid() {
         ProductService ps = mock(ProductService.class);
-        when(ps.getById(eq(1L))).thenReturn(product(1L, new BigDecimal("4000")));
-        when(ps.getById(eq(2L))).thenReturn(product(2L, new BigDecimal("5000")));
-        CompareService svc = new CompareService(ps);
-
-        CompareResponse out = svc.compare(List.of(1L, 2L, 1L), null, Language.PT_BR);
-        assertThat(out.items()).extracting(i -> i.id()).containsExactly(1L, 2L);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
+        List<Long> ids = new ArrayList<>();
+        ids.add(1L);
+        ids.add(null);
+        assertThatThrownBy(() -> svc.compare(ids, null, Language.PT_BR))
+                .isInstanceOf(InvalidCompareRequestException.class)
+                .hasMessageContaining("blank or null");
     }
 
     @Test
-    void singleId_after_dedup_throwsInvalid() {
+    void duplicateIds_throwsInvalid() {
         ProductService ps = mock(ProductService.class);
-        CompareService svc = new CompareService(ps);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
+
+        assertThatThrownBy(() -> svc.compare(List.of(1L, 2L, 1L), null, Language.PT_BR))
+                .isInstanceOf(InvalidCompareRequestException.class)
+                .hasMessageContaining("duplicate");
+    }
+
+    @Test
+    void duplicatedSingleId_throwsInvalid() {
+        ProductService ps = mock(ProductService.class);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
         assertThatThrownBy(() -> svc.compare(List.of(1L, 1L), null, Language.PT_BR))
                 .isInstanceOf(InvalidCompareRequestException.class);
     }
 
     @Test
+    void negativeId_throwsInvalid() {
+        ProductService ps = mock(ProductService.class);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
+
+        assertThatThrownBy(() -> svc.compare(List.of(1L, -2L), null, Language.PT_BR))
+                .isInstanceOf(InvalidCompareRequestException.class)
+                .hasMessageContaining("positive");
+    }
+
+    @Test
+    void zeroId_throwsInvalid() {
+        ProductService ps = mock(ProductService.class);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
+
+        assertThatThrownBy(() -> svc.compare(List.of(1L, 0L), null, Language.PT_BR))
+                .isInstanceOf(InvalidCompareRequestException.class)
+                .hasMessageContaining("positive");
+    }
+
+    @Test
     void elevenIds_throwsInvalid() {
         ProductService ps = mock(ProductService.class);
-        CompareService svc = new CompareService(ps);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
         List<Long> ids = List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L);
         assertThatThrownBy(() -> svc.compare(ids, null, Language.PT_BR))
                 .isInstanceOf(InvalidCompareRequestException.class);
@@ -105,7 +149,7 @@ class CompareServiceTest {
         ProductService ps = mock(ProductService.class);
         when(ps.getById(eq(1L))).thenReturn(product(1L, new BigDecimal("4000")));
         when(ps.getById(eq(99L))).thenThrow(new ProductNotFoundException(99L));
-        CompareService svc = new CompareService(ps);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
 
         assertThatThrownBy(() -> svc.compare(List.of(1L, 99L), null, Language.PT_BR))
                 .isInstanceOf(ProductsNotFoundException.class)
@@ -117,7 +161,7 @@ class CompareServiceTest {
         ProductService ps = mock(ProductService.class);
         when(ps.getById(eq(1L))).thenReturn(product(1L, new BigDecimal("4000")));
         when(ps.getById(eq(2L))).thenReturn(product(2L, new BigDecimal("5000")));
-        CompareService svc = new CompareService(ps);
+        CompareService svc = new CompareService(ps, NO_OP_SUMMARY);
 
         CompareResponse out = svc.compare(List.of(1L, 2L), "name,buyBox.price", Language.PT_BR);
         assertThat(out.fields()).containsExactly("name", "buyBox.price");

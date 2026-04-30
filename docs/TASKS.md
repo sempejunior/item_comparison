@@ -1,8 +1,8 @@
 ---
 id: TASKS
 title: Atomic task breakdown — Item Comparison API
-version: v1
-status: Draft
+version: v3
+status: Done
 last_updated: 2026-04-29
 depends_on: [SPEC-001, SPEC-002, SPEC-003, SPEC-004, PLAN, ADR-0001, ADR-0003, ADR-0004]
 ---
@@ -33,31 +33,31 @@ Conventions:
 
 ## 0. Task index
 
-| ID    | Title                                                       | Layer        | Spec clauses                          | Blocked by  |
-|-------|-------------------------------------------------------------|--------------|---------------------------------------|-------------|
-| T-01  | Cleanup `pom.xml` + bump to Boot 3.3.5 + add deps           | build        | PLAN §1.1, §1.2; NFR-6                | —           |
-| T-02  | Finalize `application.yml`                                  | config       | NFR-5, NFR-8; SPEC-004 §3             | T-01        |
-| T-03  | Domain enums (`Category`, `Condition`, `Language`)          | model        | SPEC-002 §2.1, §3.1; SPEC-001 FR-8    | T-01        |
-| T-04  | `AttributesJsonConverter`                                   | repository   | SPEC-002 §5                           | T-01        |
-| T-05  | JPA entities (`CatalogProductEntity`, `OfferEntity`)        | repository   | SPEC-002 §2, §3, INV-1..INV-8         | T-03, T-04  |
-| T-06  | Spring Data repositories                                    | repository   | SPEC-002 §5                           | T-05        |
-| T-07  | Public DTOs (records) + `ProblemDetail7807`                 | model        | SPEC-003 §2.1–2.3, §4                 | T-03        |
-| T-08  | `BuyBoxSelector` (pure)                                     | service      | SPEC-002 §3.3, ADR-0004; FR-7         | T-05, T-07  |
-| T-09  | `SeedLoader` + `catalog.json` (50 products / ~150 offers)   | repository   | SPEC-002 §5, §6                       | T-05, T-06  |
-| T-10  | `ProductService` (list, get-by-id, Caffeine cache)          | service      | FR-1, FR-4, FR-5; NFR-8               | T-06, T-08  |
-| T-11  | `ProductController` + MockMvc (list, get-by-id)             | controller   | FR-1, FR-4; AC-1; SPEC-003 §2.1, §2.2 | T-10        |
-| T-12  | `FieldSetProjector` (sparse fieldsets)                      | service      | FR-3; SPEC-003 §3                     | T-07        |
-| T-13  | `NumericValue` + `DifferencesCalculator`                    | service      | FR-7; SPEC-003 §2.3; SPEC-002 §3.5    | T-07, T-08  |
-| T-14  | `CompareService` (resolve → project → diff)                 | service      | FR-2, FR-3, FR-7, FR-10, FR-11        | T-12, T-13  |
-| T-15  | `GlobalExceptionHandler` + RFC 7807 wiring                  | controller   | FR-12; NFR-4; SPEC-003 §4             | T-07        |
-| T-16  | `CompareController` + MockMvc (compare, no LLM)             | controller   | FR-2, FR-10–12; AC-2, AC-3, AC-4, AC-6, AC-7 | T-14, T-15 |
-| T-17  | `PromptLoader` + `compare-summary.v1.md` + golden test      | service      | SPEC-004 §4                           | T-07        |
-| T-18  | `AiMetrics` (Micrometer counters/timer registration)        | service      | SPEC-004 §7; NFR-5                    | T-01        |
-| T-19  | `SummaryService` + Caffeine `ai-summary` + fallbacks        | service      | FR-8, FR-9; SPEC-004 §2, §5, §6, §8   | T-13, T-17, T-18 |
-| T-20  | Wire `summary` into `CompareController` + LLM-on/off MockMvc| controller   | FR-8; AC-5                            | T-16, T-19  |
-| T-21  | OpenAPI annotations + Swagger UI examples                   | controller   | NFR-3; AC-8                           | T-11, T-20  |
-| T-22  | README + Mermaid diagram + ADR cross-links                  | docs         | NFR-3, NFR-6                          | T-21        |
-| T-23  | Final pass: JaCoCo gate, manifest sync, smoke run           | quality      | NFR-2; AC-9, AC-10                    | T-22        |
+| ID    | Title                                                       | Status   | Layer        | Spec clauses                          | Blocked by  |
+|-------|-------------------------------------------------------------|----------|--------------|---------------------------------------|-------------|
+| T-01  | Cleanup `pom.xml` + bump to Boot 3.3.5 + add deps           | done     | build        | PLAN §1.1, §1.2; NFR-6                | —           |
+| T-02  | Finalize `application.yml`                                  | done     | config       | NFR-5, NFR-8; SPEC-004 §3             | T-01        |
+| T-03  | Domain enums (`Category`, `Condition`, `Language`)          | done     | model        | SPEC-002 §2.1, §3.1; SPEC-001 FR-8    | T-01        |
+| T-04  | `AttributesJsonConverter`                                   | done     | repository   | SPEC-002 §5                           | T-01        |
+| T-05  | JPA entities (`CatalogProductEntity`, `OfferEntity`)        | done     | repository   | SPEC-002 §2, §3, INV-1..INV-8         | T-03, T-04  |
+| T-06  | Spring Data repositories                                    | done     | repository   | SPEC-002 §5                           | T-05        |
+| T-07  | Public DTOs (records) + `ProblemDetail7807`                 | done     | model        | SPEC-003 §2.1–2.3, §4                 | T-03        |
+| T-08  | `BuyBoxSelector` (pure)                                     | done     | service      | SPEC-002 §3.3, ADR-0004; FR-7         | T-05, T-07  |
+| T-09  | `SeedLoader` + `catalog.json` (50 products / ~150 offers)   | done     | repository   | SPEC-002 §5, §6                       | T-05, T-06  |
+| T-10  | `ProductService` (list, get-by-id, Caffeine cache)          | done     | service      | FR-1, FR-4, FR-5; NFR-8               | T-06, T-08  |
+| T-11  | `ProductController` + MockMvc (list, get-by-id)             | done     | controller   | FR-1, FR-4; AC-1; SPEC-003 §2.1, §2.2 | T-10        |
+| T-12  | `FieldSetProjector` (sparse fieldsets)                      | done     | service      | FR-3; SPEC-003 §3                     | T-07        |
+| T-13  | `NumericValue` + `DifferencesCalculator`                    | done     | service      | FR-7; SPEC-003 §2.3; SPEC-002 §3.5    | T-07, T-08  |
+| T-14  | `CompareService` (resolve → project → diff)                 | done     | service      | FR-2, FR-3, FR-7, FR-10, FR-11        | T-12, T-13  |
+| T-15  | `GlobalExceptionHandler` + RFC 7807 wiring                  | done     | controller   | FR-12; NFR-4; SPEC-003 §4             | T-07        |
+| T-16  | `CompareController` + MockMvc (compare, no LLM)             | done     | controller   | FR-2, FR-10–12; AC-2, AC-3, AC-4, AC-6, AC-7 | T-14, T-15 |
+| T-17  | `PromptLoader` + `compare-summary.v1.md` + golden test      | done     | service      | SPEC-004 §4                           | T-07        |
+| T-18  | `AiMetrics` (Micrometer counters/timer registration)        | done     | service      | SPEC-004 §7; NFR-5                    | T-01        |
+| T-19  | `SummaryService` + Caffeine `ai-summary` + fallbacks        | done     | service      | FR-8, FR-9; SPEC-004 §2, §5, §6, §8   | T-13, T-17, T-18 |
+| T-20  | Wire `summary` into `CompareController` + LLM-on/off MockMvc| done     | controller   | FR-8; AC-5                            | T-16, T-19  |
+| T-21  | OpenAPI annotations + Swagger UI examples                   | done     | controller   | NFR-3; AC-8                           | T-11, T-20  |
+| T-22  | README + Mermaid diagram + ADR cross-links                  | done     | docs         | NFR-3, NFR-6                          | T-21        |
+| T-23  | Final pass: JaCoCo gate, manifest sync, smoke run           | done     | quality      | NFR-2; AC-9, AC-10                    | T-22        |
 
 JaCoCo coverage gate is **on from T-10 onwards** (the first task that
 produces measurable service code). Earlier tasks do not enforce it.
@@ -554,6 +554,17 @@ into the roadmap — not into a new task here.
 
 ## 9. Changelog
 
+- **v3 (2026-04-29)** — Closeout. T-21 (springdoc), T-22 (root README +
+  Mermaid), T-23 (JaCoCo gate + manifest sync) marcados `done`.
+  Saneamento BUG-1..4 + OBS-5/6/8 absorvido nas tasks já fechadas
+  (sem nova task — fixes anexados ao PR da Slice 3). Header bumpado
+  para v3, status `Done`. `mvn verify` final: 109/109 verde,
+  JaCoCo 89 % instr / 77 % branches.
+- **v2 (2026-04-29)** — Added `Status` column to the §0 task index.
+  T-01..T-20 marked `done` (Slices 1, 2, 3 shipped). T-21..T-23 remain
+  `pending`. SPEC-004 v3 transitioned to `Accepted` after T-20 wiring +
+  smoke validation (LLM-off → `summary` absent; LLM-on → graceful
+  fallback to `Optional.empty()` recorded as `ai_fallback_total{reason=timeout}`).
 - **v1 (2026-04-29)** — Initial atomic breakdown derived from PLAN v2
   + SPEC-001 v5 + SPEC-002 v5 + SPEC-003 v2 + SPEC-004 v3 + ADR-0001
   + ADR-0003 + ADR-0004. Paste-by-paste order matches

@@ -6,6 +6,7 @@ import com.hackerrank.sample.repository.CatalogProductEntity;
 import com.hackerrank.sample.repository.CatalogProductRepository;
 import com.hackerrank.sample.repository.OfferRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
@@ -53,7 +54,7 @@ class ProductServiceTest {
         CatalogProductEntity p = new CatalogProductEntity(
                 1L, "X", null, null, 4.0, Category.SMARTPHONE, Map.of());
         when(repo.findAll(PageRequest.of(0, 20)))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(p)));
+                .thenReturn(new PageImpl<>(List.of(p)));
 
         ProductService service = new ProductService(repo, offers);
         var page = service.list(null, PageRequest.of(0, 20));

@@ -55,7 +55,7 @@ springdoc:
 
 app:
   ai:
-    timeout-ms: 2000
+    timeout-ms: 3500
     daily-request-limit: 0
   errors:
     base-uri: https://api.example.com/errors
