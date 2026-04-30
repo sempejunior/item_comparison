@@ -1,0 +1,13 @@
+{
+  "attributes": {
+    "battery": { "direction": "higher_better" },
+    "memory": { "direction": "higher_better" },
+    "storage": { "direction": "higher_better" },
+    "screen_size_inches": { "direction": "higher_better" },
+    "refresh_rate_hz": { "direction": "higher_better" },
+    "hdmi_ports": { "direction": "higher_better" },
+    "capacity_l": { "direction": "higher_better" },
+    "weight": { "direction": "lower_better" },
+    "weight_kg": { "direction": "lower_better" }
+  }
+}

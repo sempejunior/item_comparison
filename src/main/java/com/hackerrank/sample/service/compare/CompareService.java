@@ -81,6 +81,17 @@ public class CompareService {
     }
 
     private List<ProductDetail> resolve(List<Long> ids) {
+        try {
+            List<ProductDetail> bulk = productService.getByIds(ids);
+            if (bulk.size() == ids.size()) {
+                return bulk;
+            }
+        } catch (ProductNotFoundException ignored) {
+        }
+        return resolveCollectingMissing(ids);
+    }
+
+    private List<ProductDetail> resolveCollectingMissing(List<Long> ids) {
         List<ProductDetail> resolved = new ArrayList<>(ids.size());
         List<Long> missing = new ArrayList<>();
         for (Long id : ids) {
