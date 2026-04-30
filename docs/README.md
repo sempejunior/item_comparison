@@ -72,6 +72,9 @@ atomic task. Each `T-NN` corresponds to one commit.
 
 ## Suggested reading order
 
+0. [`walkthrough.md`](walkthrough.md) — 10-minute narrative tour: hybrid
+   comparison, AI summary path, SDD slices and decisions worth questioning.
+   Reads as a guide; everything below is the contractual depth behind it.
 1. `specs/001-item-comparison.md` — the *what*.
 2. `specs/002-product-domain-model.md` — the data shape.
 3. `specs/003-api-contract.md` — the contract.
