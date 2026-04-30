@@ -131,6 +131,15 @@ curl 'http://localhost:8080/api/v1/products/category-insights?category=SMARTPHON
 # category insights em inglês com top 3
 curl 'http://localhost:8080/api/v1/products/category-insights?category=NOTEBOOK&topK=3&language=en'
 
+# category insights com filtro de preço (R$ 1.000 – R$ 3.000) e nota mínima 4.5
+curl 'http://localhost:8080/api/v1/products/category-insights?category=SMARTPHONE&minPrice=1000&maxPrice=3000&minRating=4.5'
+
+# category insights apenas com piso de preço (descobre o "melhor acima de X")
+curl 'http://localhost:8080/api/v1/products/category-insights?category=NOTEBOOK&minPrice=4000'
+
+# category insights com piso de avaliação (filtra "ofertas premium")
+curl 'http://localhost:8080/api/v1/products/category-insights?category=HEADPHONES&minRating=4.6'
+
 # erros típicos
 curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,1'      # 400 duplicates
 curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,9999'   # 404 products-not-found

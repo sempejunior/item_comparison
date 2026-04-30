@@ -554,6 +554,22 @@ into the roadmap — not into a new task here.
 
 ## 9. Changelog
 
+- **v5 (2026-04-30)** — Slice 5 (SPEC-005 v5 — Insights Filters) closed.
+  T-31..T-35 lived in `docs/plan-slice5.md`, all `done`: T-31
+  `InsightsFiltersRequest` + class-level `@FilterBoundsConsistent` +
+  `AppliedFilters` echo (`3cb7e16`); T-33 `SummaryService` 7-arg
+  overload + `category-insights.v3.md` `{{appliedFilters}}` block +
+  `v3.1|<digest>` cache prefix + `insightsCacheKey` package-private
+  (`bd488e2`); T-32 `CategoryInsightsService` 4-arg `insights(...)`
+  applying `InsightsFilters.asPredicate()` to product pool + controller
+  delegation (`a0785ea`); T-34 service tests for minRating/price-range/
+  pool-collapse/unfiltered-omits/digest-stability/describe + 3
+  controller validation cases + dedicated cache-key test (`b0644a4`);
+  T-35 docs + smoke + verify + PR. Filters surface
+  `minPrice`/`maxPrice`/`minRating` on `GET /category-insights`, gated
+  by Bean Validation, applied in-memory before rankings/topItems/picks,
+  threaded into the LLM prompt so the buying-guide narrates only the
+  filtered slice.
 - **v4 (2026-04-30)** — Slice 4 (SPEC-005 — Category Insights) closed.
   T-24..T-30 lived in `docs/plan-slice4.md` (atomic breakdown of one
   slice, one PR), all marked `done`: T-24 attribute-metadata rankings +
