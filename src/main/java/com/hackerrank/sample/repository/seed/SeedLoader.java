@@ -138,14 +138,14 @@ public class SeedLoader implements CommandLineRunner {
         // Keep IDs 1 and 2 anchored to Galaxy S24 / S24+ to preserve
         // dynamic testcases (http01, http03, http06) that pin those names.
         private static final List<Spec> SMARTPHONES = List.of(
-                new Spec("Galaxy S24", "Smartphone Samsung Galaxy S24 5G", 4.0, 211L,
-                        attrs("battery", "3000 mAh", "memory", "4 GB", "storage", "64 GB",
+                new Spec("Galaxy S24", "Smartphone Samsung Galaxy S24 5G 128 GB", 4.5, 3499L,
+                        attrs("battery", "4000 mAh", "memory", "8 GB", "storage", "128 GB",
                                 "brand", "Samsung", "os", "Android 14",
-                                "weight", "160 g", "size", "6.0 in")),
-                new Spec("Galaxy S24+", "Smartphone Samsung Galaxy S24+ 5G", 4.1, 248L,
-                        attrs("battery", "3200 mAh", "memory", "5 GB", "storage", "128 GB",
-                                "brand", "Xiaomi", "os", "Android 14",
-                                "weight", "164 g", "size", "6.1 in")),
+                                "weight", "167 g", "size", "6.2 in")),
+                new Spec("Galaxy S24+", "Smartphone Samsung Galaxy S24+ 5G 256 GB", 4.6, 4999L,
+                        attrs("battery", "4900 mAh", "memory", "12 GB", "storage", "256 GB",
+                                "brand", "Samsung", "os", "Android 14",
+                                "weight", "197 g", "size", "6.7 in")),
                 new Spec("Galaxy S24 Ultra 256GB", "Samsung Galaxy S24 Ultra 5G 256 GB", 4.8, 7299L,
                         attrs("battery", "5000 mAh", "memory", "12 GB", "storage", "256 GB",
                                 "brand", "Samsung", "os", "Android 14",
