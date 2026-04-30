@@ -1,8 +1,8 @@
 ---
 id: TASKS
 title: Atomic task breakdown — Item Comparison API
-version: v2
-status: Active
+version: v3
+status: Done
 last_updated: 2026-04-29
 depends_on: [SPEC-001, SPEC-002, SPEC-003, SPEC-004, PLAN, ADR-0001, ADR-0003, ADR-0004]
 ---
@@ -55,9 +55,9 @@ Conventions:
 | T-18  | `AiMetrics` (Micrometer counters/timer registration)        | done     | service      | SPEC-004 §7; NFR-5                    | T-01        |
 | T-19  | `SummaryService` + Caffeine `ai-summary` + fallbacks        | done     | service      | FR-8, FR-9; SPEC-004 §2, §5, §6, §8   | T-13, T-17, T-18 |
 | T-20  | Wire `summary` into `CompareController` + LLM-on/off MockMvc| done     | controller   | FR-8; AC-5                            | T-16, T-19  |
-| T-21  | OpenAPI annotations + Swagger UI examples                   | pending  | controller   | NFR-3; AC-8                           | T-11, T-20  |
-| T-22  | README + Mermaid diagram + ADR cross-links                  | pending  | docs         | NFR-3, NFR-6                          | T-21        |
-| T-23  | Final pass: JaCoCo gate, manifest sync, smoke run           | pending  | quality      | NFR-2; AC-9, AC-10                    | T-22        |
+| T-21  | OpenAPI annotations + Swagger UI examples                   | done     | controller   | NFR-3; AC-8                           | T-11, T-20  |
+| T-22  | README + Mermaid diagram + ADR cross-links                  | done     | docs         | NFR-3, NFR-6                          | T-21        |
+| T-23  | Final pass: JaCoCo gate, manifest sync, smoke run           | done     | quality      | NFR-2; AC-9, AC-10                    | T-22        |
 
 JaCoCo coverage gate is **on from T-10 onwards** (the first task that
 produces measurable service code). Earlier tasks do not enforce it.
@@ -554,6 +554,12 @@ into the roadmap — not into a new task here.
 
 ## 9. Changelog
 
+- **v3 (2026-04-29)** — Closeout. T-21 (springdoc), T-22 (root README +
+  Mermaid), T-23 (JaCoCo gate + manifest sync) marcados `done`.
+  Saneamento BUG-1..4 + OBS-5/6/8 absorvido nas tasks já fechadas
+  (sem nova task — fixes anexados ao PR da Slice 3). Header bumpado
+  para v3, status `Done`. `mvn verify` final: 109/109 verde,
+  JaCoCo 89 % instr / 77 % branches.
 - **v2 (2026-04-29)** — Added `Status` column to the §0 task index.
   T-01..T-20 marked `done` (Slices 1, 2, 3 shipped). T-21..T-23 remain
   `pending`. SPEC-004 v3 transitioned to `Accepted` after T-20 wiring +
