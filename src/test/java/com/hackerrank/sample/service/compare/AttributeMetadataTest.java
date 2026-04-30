@@ -1,11 +1,15 @@
 package com.hackerrank.sample.service.compare;
 
+import com.hackerrank.sample.model.Category;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AttributeMetadataTest {
 
@@ -34,6 +38,62 @@ class AttributeMetadataTest {
     void directionFor_nullKey_returnsNone() {
         AttributeMetadata registry = AttributeMetadata.defaultRegistry();
         assertThat(registry.directionFor(null)).isEqualTo(AttributeMetadata.Direction.NONE);
+    }
+
+    @Test
+    void defaultRegistry_loadsCategoryRankingsForEveryCategoryEnumValue() {
+        AttributeMetadata registry = AttributeMetadata.defaultRegistry();
+
+        for (Category category : Category.values()) {
+            assertThat(registry.rankingPathsFor(category))
+                    .as("rankings for %s", category)
+                    .isNotEmpty()
+                    .startsWith("buyBox.price", "rating");
+        }
+    }
+
+    @Test
+    void rankingPathsFor_smartphone_matchesPlannedShape() {
+        AttributeMetadata registry = AttributeMetadata.defaultRegistry();
+
+        assertThat(registry.rankingPathsFor(Category.SMARTPHONE))
+                .containsExactly(
+                        "buyBox.price",
+                        "rating",
+                        "attributes.battery",
+                        "attributes.memory",
+                        "attributes.storage");
+    }
+
+    @Test
+    void rankingPathsFor_nullCategory_returnsEmptyList() {
+        AttributeMetadata registry = AttributeMetadata.defaultRegistry();
+        assertThat(registry.rankingPathsFor(null)).isEmpty();
+    }
+
+    @Test
+    void parser_failsFastWhenCategoryRankingsMissesAnEnumValue() {
+        assertThatThrownBy(() -> invokeLoadFromClasspath("/attribute-metadata-missing-category.json"))
+                .isInstanceOf(InvocationTargetException.class)
+                .hasCauseInstanceOf(IllegalStateException.class)
+                .extracting(Throwable::getCause)
+                .satisfies(cause -> assertThat(cause.getMessage())
+                        .contains("missing entries for")
+                        .contains("HEADPHONES")
+                        .contains("NOTEBOOK")
+                        .contains("REFRIGERATOR")
+                        .contains("SMART_TV"));
+    }
+
+    @Test
+    void packagePrivateConstructor_acceptsCategoryRankings() {
+        AttributeMetadata custom = new AttributeMetadata(
+                Map.of("battery", AttributeMetadata.Direction.HIGHER_BETTER),
+                Map.of(Category.SMARTPHONE, List.of("buyBox.price", "rating")));
+
+        assertThat(custom.rankingPathsFor(Category.SMARTPHONE))
+                .containsExactly("buyBox.price", "rating");
+        assertThat(custom.rankingPathsFor(Category.NOTEBOOK)).isEmpty();
     }
 
     @Test
