@@ -65,8 +65,14 @@ public interface CompareApi {
             )
             @RequestParam("ids") List<Long> ids,
             @Parameter(
-                    description = "Comma-separated field paths to project per item (sparse fields). Supports `attributes.<key>` and `buyBox.<sub>`.",
-                    example = "name,buyBox.price,attributes.battery"
+                    description = """
+                            Optional sparse-field projection. When omitted, every comparable attribute is
+                            considered (full schema for same-category requests, intersection of attribute
+                            keys for cross-category). When provided, `differences[]` is restricted to the
+                            listed paths. Supports `attributes.<key>` and `buyBox.<sub>`.
+
+                            Example: `name,buyBox.price,attributes.battery`
+                            """
             )
             @RequestParam(value = "fields", required = false) String fields,
             @Parameter(

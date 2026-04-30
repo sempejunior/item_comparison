@@ -1,1 +1,1 @@
-{"request":{"method":"GET","url":"/api/v1/products?page=0&size=20","headers":{"Content-Type":"application/json"},"body":{}},"response":{"status_code":200,"headers":{"Content-Type":"application/json"},"body":{"page":0,"size":20,"totalElements":50,"totalPages":3}}}
+{"request":{"method":"GET","url":"/api/v1/products?page=0&size=20","headers":{"Content-Type":"application/json"},"body":{}},"response":{"status_code":200,"headers":{"Content-Type":"application/json"},"body":{"page":0,"size":20,"totalElements":250,"totalPages":13}}}

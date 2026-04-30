@@ -9,5 +9,12 @@
     "capacity_l": { "direction": "higher_better" },
     "weight": { "direction": "lower_better" },
     "weight_kg": { "direction": "lower_better" }
+  },
+  "categoryRankings": {
+    "SMARTPHONE":   ["buyBox.price", "rating", "attributes.battery", "attributes.memory", "attributes.storage"],
+    "SMART_TV":     ["buyBox.price", "rating", "attributes.screen_size_inches", "attributes.refresh_rate_hz"],
+    "NOTEBOOK":     ["buyBox.price", "rating", "attributes.memory", "attributes.storage", "attributes.weight"],
+    "HEADPHONES":   ["buyBox.price", "rating", "attributes.battery", "attributes.weight"],
+    "REFRIGERATOR": ["buyBox.price", "rating", "attributes.capacity_l", "attributes.energy_class"]
   }
 }

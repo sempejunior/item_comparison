@@ -1,9 +1,9 @@
 ---
 id: SPEC-001
 title: Item Comparison API
-version: v7
+version: v8
 status: Draft
-last_updated: 2026-04-29
+last_updated: 2026-04-30
 ---
 
 # SPEC-001 — Item Comparison API
@@ -260,6 +260,27 @@ differentiators in `differences[]`).*
 
 ## 11. Changelog
 
+- **v8 (2026-04-30)** — Reframe of the optional `/compare` `summary`
+  field as a buying guide instead of a flat description. Driven by
+  smoke output that read like a narration of `differences[]` ("X has
+  3000 mAh, Y has 3200 mAh") with no recommendation. The deterministic
+  contract is unchanged: `differences[]` shape, `crossCategory`,
+  `exclusiveAttributes`, `language` parameter, sparse `fields=`
+  semantics — all stable. The only changes are internal to the LLM
+  layer: (a) the prompt is bumped from `compare-summary.v1.md` to
+  `compare-summary.v2.md` with anti-hallucination rules, currency
+  formatting per language, two distinct buying-guide few-shots and a
+  third for the empty-`differences` case; (b) the prompt payload now
+  carries an internal `wins` map (per product id, the list of raw
+  `<label>: <value>` axes where it wins), computed from
+  `differences[*].winnerId` and discarded after rendering; (c) the
+  compare cache key is prefixed with `v2|` to invalidate v1 entries.
+  Decisions: `wins` is internal-only (does not appear in the JSON
+  response); diffs with `winnerId == null` are skipped (cross-category
+  exclusivity is already covered by `crossCategory` +
+  `exclusiveAttributes`). No FR/AC renumbering. SPEC-004 is unaffected
+  — the fallback contract (timeouts, no-key, budget) and the metric
+  surface stay identical.
 - **v7 (2026-04-29)** — Locked `rating` shape to a scalar `Double` in
   `[0.0, 5.0]` via FR-5a. A prior internal note had floated a
   `{ average, count }` object; that was cut from v1 because the

@@ -26,6 +26,7 @@ em &lt; 3 s na primeira chamada e &lt; 200 ms em cache hit.
 | GET    | `/api/v1/products`                         | Listagem paginada (`page`, `size`, `category`).   |
 | GET    | `/api/v1/products/{id}`                    | Detalhe completo + `buyBox`. Aceita `fields=...`. |
 | GET    | `/api/v1/products/compare?ids=...`         | Compara 2-10 produtos. Aceita `fields`, `language`. |
+| GET    | `/api/v1/products/category-insights?category=...` | Panorama de categoria: `rankings[]` + `topItems[]` + `summary` opcional. |
 
 Erros seguem [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807)
 com slugs `validation`, `bad-request`, `not-found`,
@@ -124,6 +125,12 @@ curl 'http://localhost:8080/api/v1/products/compare?ids=1,21'
 # compare em inglês
 curl 'http://localhost:8080/api/v1/products/compare?ids=1,2&language=en'
 
+# category insights — rankings determinísticos + summary opcional
+curl 'http://localhost:8080/api/v1/products/category-insights?category=SMARTPHONE'
+
+# category insights em inglês com top 3
+curl 'http://localhost:8080/api/v1/products/category-insights?category=NOTEBOOK&topK=3&language=en'
+
 # erros típicos
 curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,1'      # 400 duplicates
 curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,9999'   # 404 products-not-found
@@ -208,10 +215,11 @@ Ordem sugerida para auditoria:
 3. [`docs/specs/002-product-domain-model.md`](./docs/specs/002-product-domain-model.md) — modelo de dados e invariantes
 4. [`docs/specs/003-api-contract.md`](./docs/specs/003-api-contract.md) — contrato HTTP, RFC 7807, exemplos
 5. [`docs/specs/004-ai-features.md`](./docs/specs/004-ai-features.md) — política de fallback, métricas, prompt versionado
-6. [`docs/adrs/`](./docs/adrs/) — quatro decisões arquiteturais com contexto, alternativas e consequências
-7. [`docs/plan.md`](./docs/plan.md) — sequência de implementação por slices funcionais
-8. [`docs/TASKS.md`](./docs/TASKS.md) — tasks atômicas (T-01..T-23) com Definition of Done
-9. [`docs/roadmap.md`](./docs/roadmap.md) — evolução para produção (R-1..R-8)
+6. [`docs/specs/005-category-insights.md`](./docs/specs/005-category-insights.md) — panorama de categoria (rankings determinísticos + summary opcional)
+7. [`docs/adrs/`](./docs/adrs/) — cinco decisões arquiteturais com contexto, alternativas e consequências
+8. [`docs/plan.md`](./docs/plan.md) e [`docs/plan-slice4.md`](./docs/plan-slice4.md) — sequência de implementação por slices funcionais
+9. [`docs/TASKS.md`](./docs/TASKS.md) — tasks atômicas (T-01..T-30) com Definition of Done
+10. [`docs/roadmap.md`](./docs/roadmap.md) — evolução para produção (R-1..R-10)
 
 ## Estrutura do repositório
 

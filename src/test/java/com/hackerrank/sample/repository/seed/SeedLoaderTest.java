@@ -25,8 +25,8 @@ class SeedLoaderTest {
 
     @Test
     void seedLoadsExpectedCounts() {
-        assertThat(products.count()).isEqualTo(50L);
-        assertThat(offers.count()).isGreaterThanOrEqualTo(100L);
+        assertThat(products.count()).isEqualTo(250L);
+        assertThat(offers.count()).isGreaterThanOrEqualTo(500L);
     }
 
     @Test
@@ -35,7 +35,7 @@ class SeedLoaderTest {
             assertThat(products.findAllByCategory(c, PageRequest.of(0, 50))
                     .getTotalElements())
                     .as("category %s", c)
-                    .isEqualTo(10L);
+                    .isEqualTo(50L);
         }
     }
 
@@ -48,7 +48,7 @@ class SeedLoaderTest {
 
     @Test
     void usedRefurbishedOnlyEdgeCaseIsPresent() {
-        List<OfferEntity> productOffers = offers.findAllByCatalogProductId(41L);
+        List<OfferEntity> productOffers = offers.findAllByCatalogProductId(201L);
         assertThat(productOffers).isNotEmpty();
         assertThat(productOffers).noneMatch(o -> o.getCondition() == Condition.NEW);
     }

@@ -1,10 +1,10 @@
 ---
 id: TASKS
 title: Atomic task breakdown — Item Comparison API
-version: v3
+version: v4
 status: Done
-last_updated: 2026-04-29
-depends_on: [SPEC-001, SPEC-002, SPEC-003, SPEC-004, PLAN, ADR-0001, ADR-0003, ADR-0004]
+last_updated: 2026-04-30
+depends_on: [SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, PLAN, PLAN-S4, ADR-0001, ADR-0003, ADR-0004, ADR-0005]
 ---
 
 # TASKS — One commit, one task
@@ -554,6 +554,23 @@ into the roadmap — not into a new task here.
 
 ## 9. Changelog
 
+- **v4 (2026-04-30)** — Slice 4 (SPEC-005 — Category Insights) closed.
+  T-24..T-30 lived in `docs/plan-slice4.md` (atomic breakdown of one
+  slice, one PR), all marked `done`: T-24 attribute-metadata rankings +
+  boot-time enum check; T-25 insights DTOs; T-26 `CategoryInsightsService`
+  (deterministic rankings + topItems heuristic); T-27 controller +
+  springdoc + RFC 7807 examples; T-28 `summariseCategoryInsights` on
+  `SummaryService` + `category-insights.v1.md` prompt + `ai-category-insights`
+  cache + `kind=category_insights` metrics; T-29 LLM wiring on the
+  controller; T-30 README/SUBMISSION/TASKS + smoke + verify.
+  `mvn verify` final: **136/136 verde**, JaCoCo 86 % instr / 86.7 %
+  lines / 89.5 % methods / 75 % branches / 100 % classes. Smoke contra
+  `:8081` cobriu happy sem chave + happy com chave em pt-BR e en +
+  todos os fluxos de erro RFC 7807 + regressão `/products`,
+  `/products/{id}`, `/compare`. Slice 5 (R-10: structured filters on
+  `/category-insights`) já registrada no roadmap v4 como próxima
+  evolução, com plano detalhado a abrir em `docs/plan-slice5.md`
+  após o merge.
 - **v3 (2026-04-29)** — Closeout. T-21 (springdoc), T-22 (root README +
   Mermaid), T-23 (JaCoCo gate + manifest sync) marcados `done`.
   Saneamento BUG-1..4 + OBS-5/6/8 absorvido nas tasks já fechadas

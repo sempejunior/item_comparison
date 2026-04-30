@@ -13,4 +13,6 @@ public interface CatalogProductRepository extends JpaRepository<CatalogProductEn
     Page<CatalogProductEntity> findAllByCategory(Category category, Pageable pageable);
 
     List<CatalogProductEntity> findAllByIdIn(Collection<Long> ids);
+
+    List<CatalogProductEntity> findAllByCategory(Category category);
 }

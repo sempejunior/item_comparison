@@ -22,6 +22,7 @@ spring:
     cache-names:
       - products
       - ai-summary
+      - ai-category-insights
     caffeine:
       spec: maximumSize=1000,expireAfterWrite=5m,recordStats
   ai:

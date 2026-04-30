@@ -1,0 +1,8 @@
+{
+  "attributes": {
+    "battery": { "direction": "higher_better" }
+  },
+  "categoryRankings": {
+    "SMARTPHONE": ["buyBox.price", "rating"]
+  }
+}
