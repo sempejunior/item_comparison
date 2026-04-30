@@ -1,230 +1,309 @@
 # Item Comparison API — Mercado Livre Challenge
 
-Backend RESTful para a feature de comparação de produtos descrita no
-desafio *Item Comparison V2* do Mercado Livre. A API expõe quatro
-operações de leitura sobre um catálogo simulado, com cálculo
-determinístico de diferenças entre produtos e um resumo opcional em
-linguagem natural gerado por LLM (com fallback silencioso quando
-indisponível).
+Comparing items in a catalogue is a **hybrid problem**. The factual
+side — which product is cheaper, has more battery, is heavier — must
+be deterministic and auditable. The narrative side — *given all of
+that, which one fits a budget shopper?* — reads better as one
+well-written paragraph than as a row of cells. This service handles
+the two as separate concerns: a lexical core computes
+`differences[]` and `rankings[]` deterministically, and an LLM is
+given a narrow, narrative-only job (the optional `summary`) with a
+silent fallback so the API stays a 200 when the model is down.
 
-## TL;DR para o avaliador
+Four read endpoints over a simulated catalogue, RFC 7807 error
+shape, JaCoCo ≥ 80 %, 156 unit + integration tests green.
+
+> **Looking for the story behind the design?** Start with
+> [`docs/walkthrough.md`](docs/walkthrough.md) — a 10-minute tour
+> covering hybrid comparison, the AI summary path, the SDD slices and
+> the decisions worth questioning. The [specs](docs/specs/) and
+> [ADRs](docs/adrs/) carry the contractual depth.
+
+## TL;DR for the reviewer
 
 ```bash
-mvn spring-boot:run                                  # sobe em :8080
-open http://localhost:8080/swagger-ui.html           # contrato interativo
+mvn spring-boot:run                                  # starts on :8080
+open http://localhost:8080/swagger-ui.html           # interactive contract
 curl 'http://localhost:8080/api/v1/products/compare?ids=1,2'
 ```
 
-Sem `OPENAI_API_KEY`, todos os endpoints funcionam normalmente — o
-campo `summary` simplesmente é omitido. Com a chave configurada (via
-`.env` ou variável de ambiente), o `summary` é populado em < 3 s na
-primeira chamada e < 200 ms em cache hit.
+Without `OPENAI_API_KEY`, every endpoint works normally — the
+`summary` field is simply omitted. With the key configured (via
+`.env` or environment variable), `summary` is populated in < 3 s on
+the first call and < 200 ms on cache hit.
 
-## Arquitetura
+## Architecture
 
-![Architecture](docs/assets/architecture.svg)
+```
+                       +-----------------------------+
+                       |           Client            |
+                       +--------------+--------------+
+                                      | HTTP (RFC 7807 errors)
+                       +--------------v--------------+
+                       |   Controllers + Advice       |
+                       |   Product / Compare /        |
+                       |   CategoryInsights           |
+                       +--------------+--------------+
+                                      |
+       +------------------------------+------------------------------+
+       |                              |                              |
++------v---------+           +--------v---------+           +--------v---------+
+|  ProductService|           |  CompareService  |           | InsightsService  |
+|  sparse fields |           |  + BuyBoxSelector|           |  + InsightsFilters
+|  Caffeine      |           |  + Differences   |           |  + Rankings      |
+|  'products'    |           |  + Projector     |           |  + TopItems      |
+|                |           |                  |           |  + Picks (det.)  |
++------+---------+           +--------+---------+           +--------+---------+
+       |                              |                              |
+       |                              v                              |
+       |                     +------------------+                    |
+       |                     | SummaryService   |<-------------------+
+       |                     |  prompt files    |   (optional, async)
+       |                     |  3.5 s timeout   |
+       |                     |  Caffeine cache  |
+       |                     |  DailyBudget     |
+       |                     |  silent fallback |
+       |                     +--------+---------+
+       |                              |
++------v---------+              +-----v----------+
+|  H2 + JPA      |              |  OpenAI        |
+|  in-memory     |              |  (Spring AI)   |
++----------------+              +----------------+
 
-> *O SVG acima renderiza nativamente no GitHub e em qualquer viewer de
-> markdown. Para uma versão interativa do mesmo fluxo, ver o diagrama
-> Mermaid em [Fluxo do `/compare`](#fluxo-do-compare).*
+  Metrics: ai_calls_total · ai_fallback_total · ai_tokens_total · cache_hit ratios
+  Caches : 'products' (TTL 30s) · 'ai-summary' (5min) · 'ai-category-insights' (5min)
+```
 
-Pontos-chave:
+Key points:
 
-- **Camadas alinhadas com o skeleton do HackerRank** (`controller →
-  service → repository / model / exception`) — restrição do desafio
-  formalizada em [ADR-0003](docs/adrs/0003-keep-skeleton-paste-friendly-submission.md).
-- **LLM nunca está no caminho crítico de correção.** Toda chamada ao
-  modelo passa por `SummaryService`, que tem timeout 3.5 s, cache
-  Caffeine de 5 min e fallback silencioso (omite o campo `summary`).
-- **Funções puras isoláveis** — `BuyBoxSelector`,
-  `DifferencesCalculator`, `FieldSetProjector`, `InsightsFilters` são
-  testáveis sem Spring, com golden tests dedicados.
-- **Caches separados** — `products`, `ai-summary` e
-  `ai-category-insights` têm políticas de chave e expiração próprias.
+- **Layers aligned with the HackerRank skeleton** (`controller →
+  service → repository / model / exception`) — challenge constraint
+  formalised in [ADR-0003](docs/adrs/0003-keep-skeleton-paste-friendly-submission.md).
+- **The LLM is never on the critical path of correctness.** Every
+  model call goes through `SummaryService`, which has a 3.5 s
+  timeout, a 5-minute Caffeine cache and a silent fallback (the
+  `summary` field is simply omitted).
+- **Pure, isolable functions** — `BuyBoxSelector`,
+  `DifferencesCalculator`, `FieldSetProjector`, `InsightsFilters`
+  are testable without Spring, with dedicated golden tests.
+- **Separate caches** — `products`, `ai-summary` and
+  `ai-category-insights` each have their own key shape and
+  expiration policy.
+
+### Sequence — `/compare` end-to-end
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant Ctrl as CompareController
+    participant Svc as CompareService
+    participant Prod as ProductService
+    participant DB as H2 (JPA)
+    participant Cache as Caffeine
+    participant AI as SummaryService
+    participant LLM as OpenAI
+
+    C->>Ctrl: GET /compare?ids=...&fields=...&language=...
+    Ctrl->>Ctrl: validate (size 2..10, positive, unique)
+    Ctrl->>Svc: compare(ids, fields, language)
+    Svc->>Prod: getByIds(ids)
+    Prod->>Cache: get('products', id)
+    alt cache hit
+        Cache-->>Prod: ProductDetail
+    else miss
+        Prod->>DB: findAllById
+        DB-->>Prod: rows
+        Prod->>Cache: put
+    end
+    Prod-->>Svc: List<ProductDetail>
+    Svc->>Svc: BuyBoxSelector / Differences / Projector
+    opt LLM enabled & key present & budget ok
+        Svc->>AI: summarise(items, diffs, language)
+        AI->>Cache: get('ai-summary', key)
+        alt cache hit
+            Cache-->>AI: cached text
+        else miss
+            AI->>LLM: chat(prompt) within 3.5 s
+            alt success
+                LLM-->>AI: text
+                AI->>Cache: put
+            else timeout / 5xx / auth / budget
+                AI-->>Svc: Optional.empty (silent fallback)
+            end
+        end
+        AI-->>Svc: Optional<String>
+    end
+    Svc-->>Ctrl: CompareResponse
+    Ctrl-->>C: 200 application/json
+```
 
 ## Endpoints
 
-| Método | Path                                              | Descrição                                                |
-|--------|---------------------------------------------------|----------------------------------------------------------|
-| GET    | `/api/v1/products`                                | Listagem paginada (`page`, `size`, `category`).           |
-| GET    | `/api/v1/products/{id}`                           | Detalhe completo + `buyBox`. Aceita `fields=...`.         |
-| GET    | `/api/v1/products/compare?ids=...`                | Compara 2-10 produtos. Aceita `fields`, `language`.       |
-| GET    | `/api/v1/products/category-insights?category=...` | Panorama: `rankings[]` + `topItems[]` + filtros + `summary` opcional. |
+| Method | Path                                              | Description                                                |
+|--------|---------------------------------------------------|------------------------------------------------------------|
+| GET    | `/api/v1/products`                                | Paged listing (`page`, `size`, `category`).                |
+| GET    | `/api/v1/products/{id}`                           | Full detail + `buyBox`. Accepts `fields=...`.              |
+| GET    | `/api/v1/products/compare?ids=...`                | Compares 2–10 products. Accepts `fields`, `language`.      |
+| GET    | `/api/v1/products/category-insights?category=...` | Landscape: `rankings[]` + `topItems[]` + filters + optional `summary`. |
 
-Erros seguem [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807)
-com slugs `validation`, `bad-request`, `not-found`,
-`products-not-found`, `method-not-allowed` e `internal`. Exemplos
-completos em [`docs/specs/003-api-contract.md`](./docs/specs/003-api-contract.md).
+Errors follow [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807)
+with the slugs `validation`, `bad-request`, `not-found`,
+`products-not-found`, `method-not-allowed` and `internal`. Full
+examples in [`docs/specs/003-api-contract.md`](./docs/specs/003-api-contract.md).
 
 ## Stack
 
 - **Java 21** + **Spring Boot 3.3.5** + **Maven 3.9+**
-- **H2 in-memory** (modo PostgreSQL) com **Spring Data JPA**
-- **Caffeine** para cache de produtos e respostas LLM
-- **Spring AI** abstraindo OpenAI — apenas o `summary` opcional
-- **springdoc-openapi 2.6** → Swagger UI em `/swagger-ui.html`
-- **Spring Boot Actuator** + Micrometer para métricas
-- **JUnit 5** + **AssertJ** + **MockMvc**, cobertura via **JaCoCo** ≥ 80 %
+- **H2 in-memory** (PostgreSQL mode) with **Spring Data JPA**
+- **Caffeine** for product and LLM-response caches
+- **Spring AI** abstracting OpenAI — only the optional `summary`
+- **springdoc-openapi 2.6** → Swagger UI at `/swagger-ui.html`
+- **Spring Boot Actuator** + Micrometer for metrics
+- **JUnit 5** + **AssertJ** + **MockMvc**, coverage via **JaCoCo** ≥ 80 %
 
-## Como rodar
+## How to run
 
-### Requisitos
-- JDK 21 (`java -version` reporta 21)
+### Requirements
+- JDK 21 (`java -version` reports 21)
 - Maven 3.9+
 
-### Subir a aplicação
+### Start the application
 
 ```bash
 mvn spring-boot:run
 ```
 
-A porta padrão é `8080`. Se já estiver ocupada, use
-`SERVER_PORT=8081 mvn spring-boot:run`. Para empacotar e rodar como jar:
+The default port is `8080`. If it is already in use, run
+`SERVER_PORT=8081 mvn spring-boot:run`. To package and run as a jar:
 
 ```bash
 mvn -DskipTests package
 java -jar target/sample-1.0.0.jar
 ```
 
-### Habilitar o `summary` LLM
+### Enable the LLM `summary`
 
 ```bash
 cp .env.example .env
-# edite .env e defina OPENAI_API_KEY=sk-...
+# edit .env and set OPENAI_API_KEY=sk-...
 set -a && source .env && set +a
 mvn spring-boot:run
 ```
 
-Sem a chave, o serviço passa para o fallback determinístico
-(documentado em [SPEC-004 §6](./docs/specs/004-ai-features.md)).
+Without the key, the service falls back to its deterministic
+behaviour (documented in [SPEC-004 §6](./docs/specs/004-ai-features.md)).
 
-### Rodar a suíte de testes + cobertura
+### Run the test suite + coverage
 
 ```bash
 mvn verify
 open target/site/jacoco/index.html
 ```
 
-## Como avaliar
+## How to evaluate
 
-1. **Swagger UI** — `http://localhost:8080/swagger-ui.html` cobre os
-   quatro endpoints com exemplos de request, schema de resposta e
-   exemplos de erro RFC 7807.
-2. **Smoke por curl** — comandos prontos abaixo cobrem happy path,
-   sparse fields, cross-category, filtros de insights e fluxos de erro.
-3. **Métricas** — `GET /actuator/metrics/ai_calls_total` mostra
-   `outcome=ok|cache_hit|timeout|error`; `ai_fallback_total` detalha
-   motivos (`no_key`, `budget`, `timeout`, etc).
-4. **Trilho SDD** — começa em [`docs/README.md`](./docs/README.md).
+1. **Swagger UI** — `http://localhost:8080/swagger-ui.html` covers
+   the four endpoints with request examples, response schemas and
+   RFC 7807 error examples.
+2. **Curl smoke** — the commands below cover happy paths, sparse
+   fields, cross-category, insights filters and error flows.
+3. **Metrics** — `GET /actuator/metrics/ai_calls_total` exposes
+   `outcome=ok|cache_hit|timeout|error`; `ai_fallback_total`
+   breaks down reasons (`no_key`, `budget`, `timeout`, etc).
+4. **SDD trail** — start at [`docs/README.md`](./docs/README.md).
 
-### Curl rápidos
+### Quick curls
 
 ```bash
-# listagem default
+# default listing
 curl 'http://localhost:8080/api/v1/products'
 
-# detalhe completo
+# full detail
 curl 'http://localhost:8080/api/v1/products/1'
 
-# detalhe com sparse fields
+# detail with sparse fields
 curl 'http://localhost:8080/api/v1/products/1?fields=name,buyBox.price'
 
-# compare happy path (mesma categoria)
+# compare happy path (same category)
 curl 'http://localhost:8080/api/v1/products/compare?ids=1,2'
 
-# compare cross-category (interseção de attributes + exclusiveAttributes)
+# compare cross-category (intersection of attributes + exclusiveAttributes)
 curl 'http://localhost:8080/api/v1/products/compare?ids=1,21'
 
-# compare em inglês
+# compare in English
 curl 'http://localhost:8080/api/v1/products/compare?ids=1,2&language=en'
 
-# category insights — rankings determinísticos + summary opcional
+# category insights — deterministic rankings + optional summary
 curl 'http://localhost:8080/api/v1/products/category-insights?category=SMARTPHONE'
 
-# category insights filtrado por preço (R$ 1.000-3.000) e nota mínima
+# category insights filtered by price (BRL 1,000–3,000) and minimum rating
 curl 'http://localhost:8080/api/v1/products/category-insights?category=SMARTPHONE&minPrice=1000&maxPrice=3000&minRating=4.5'
 
-# erros típicos
+# typical error responses
 curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,1'        # 400 duplicates
 curl -i 'http://localhost:8080/api/v1/products/compare?ids=1,9999'     # 404 products-not-found
 curl -i 'http://localhost:8080/api/v1/products/category-insights?category=SMARTPHONE&minRating=6'  # 400 validation
 curl -i -X POST 'http://localhost:8080/api/v1/products/compare?ids=1,2'  # 405
 ```
 
-## Decisões arquiteturais de destaque
+## Architectural decisions worth highlighting
 
-- **`CatalogProduct + Offer`** em vez de `Product` simples — espelha o
-  modelo real do Mercado Livre.
+- **`CatalogProduct + Offer`** instead of a flat `Product` — mirrors
+  the real-world Mercado Livre data model.
   [SPEC-002 §1–§3](./docs/specs/002-product-domain-model.md).
-- **`buyBox` derivado deterministicamente** por tier (NEW > REFURBISHED >
-  USED), preço ascendente, reputação descendente, `sellerId`
-  lexicográfico — [ADR-0004](./docs/adrs/0004-buybox-selection-heuristic.md).
-- **Comparação híbrida** — `differences[]` sempre presente; `summary`
-  opcional com timeout 3.5 s, cache Caffeine de 5 min e fallback
-  silencioso. [SPEC-001 §5.2](./docs/specs/001-item-comparison.md),
+- **`buyBox` derived deterministically** by tier
+  (NEW > REFURBISHED > USED), ascending price, descending reputation,
+  lexicographic `sellerId` —
+  [ADR-0004](./docs/adrs/0004-buybox-selection-heuristic.md).
+- **Hybrid comparison** — `differences[]` is always present;
+  `summary` is optional, with a 3.5 s timeout, a 5-minute Caffeine
+  cache and a silent fallback.
+  [SPEC-001 §5.2](./docs/specs/001-item-comparison.md),
   [SPEC-004 §6](./docs/specs/004-ai-features.md).
-- **Cross-category compare** — `differences[]` opera sobre interseção
-  de attribute keys; exclusivos vão para `exclusiveAttributes` e a
-  flag `crossCategory: true` sinaliza o caso ao consumidor.
-- **Category insights = panorama de categoria** — `rankings[]` com
-  cobertura por atributo, `topItems[]` heurístico e `picks` internas
-  alimentando um *buying guide* via LLM. Aceita filtros `minPrice` /
-  `maxPrice` / `minRating` aplicados antes do ranking, com filtros
-  hashed na cache key.
+- **Cross-category compare** — `differences[]` operates on the
+  intersection of attribute keys; the exclusives go into
+  `exclusiveAttributes` and the `crossCategory: true` flag signals
+  the case to the consumer.
+- **Category insights as a category landscape** — `rankings[]` with
+  per-attribute coverage, heuristic `topItems[]` and internal
+  `picks` feeding a *buying guide* via the LLM. Accepts
+  `minPrice` / `maxPrice` / `minRating` filters applied before the
+  ranking, with filters hashed into the cache key.
   [SPEC-005](./docs/specs/005-category-insights.md),
   [ADR-0005](./docs/adrs/0005-category-insights-endpoint-shape.md),
   [ADR-0006](./docs/adrs/0006-insights-filters-in-memory-with-scale-up-path.md).
-- **Skeleton de pacotes do HackerRank é fixo** —
+- **HackerRank package skeleton is fixed** —
   [ADR-0003](./docs/adrs/0003-keep-skeleton-paste-friendly-submission.md).
-- **Busca semântica fora do escopo v1**, deliberadamente. Pipeline RAG
-  completa documentada com o mesmo rigor em
+- **Semantic search out of v1 scope**, deliberately. The full RAG
+  pipeline is documented with the same rigor in
   [`docs/roadmap.md`](./docs/roadmap.md) §R-2.
 
-## Fluxo do `/compare`
+## Documentation
 
-```mermaid
-flowchart TB
-  Client[Client] -->|GET /compare?ids=...| Ctrl[CompareController]
-  Ctrl -->|validate ids| Svc[CompareService]
-  Svc -->|getById x N| PSvc[ProductService]
-  PSvc -->|cache| Cache[(Caffeine 'products')]
-  PSvc -->|miss| Repo[ProductRepository → H2]
-  Svc -->|derive| BuyBox[BuyBoxSelector]
-  Svc -->|compute| Diffs[DifferencesCalculator]
-  Svc -->|fields=?| Proj[FieldSetProjector]
-  Svc -->|optional| Sum[SummaryService]
-  Sum -->|cache| AICache[(Caffeine 'ai-summary')]
-  Sum -->|miss| LLM[(OpenAI ChatClient)]
-  Sum -.->|timeout/no key/budget| Fallback[fallback: omit summary]
-  Sum --> Metrics[(Micrometer<br/>ai_calls_total<br/>ai_fallback_total)]
-  Svc --> Resp[CompareResponse]
-  Resp --> Client
-```
-
-## Documentação
-
-| Trilha | Onde |
-|--------|------|
+| Track | Where |
+|-------|-------|
+| Narrative walkthrough (10 min) | [`docs/walkthrough.md`](./docs/walkthrough.md) |
+| Navigable index (SDD) | [`docs/README.md`](./docs/README.md) |
 | Specs (SPEC-001..005) | [`docs/specs/`](./docs/specs/) |
 | ADRs (0001..0006) | [`docs/adrs/`](./docs/adrs/) |
 | Roadmap (R-1..R-10) | [`docs/roadmap.md`](./docs/roadmap.md) |
 | Execution log (slices, T-01..T-35) | [`docs/execution/`](./docs/execution/) |
-| Índice navegável | [`docs/README.md`](./docs/README.md) |
 
-## Estrutura do repositório
+## Repository layout
 
 ```
 .
-├── README.md                   este arquivo
+├── README.md                   this file
 ├── pom.xml                     Spring Boot 3.3.5, Java 21
-├── .env.example                template para OPENAI_API_KEY
+├── .env.example                template for OPENAI_API_KEY
 ├── docs/
-│   ├── README.md               índice SDD
-│   ├── assets/architecture.svg diagrama de arquitetura
+│   ├── README.md               SDD index
+│   ├── walkthrough.md          narrative tour (architecture, AI, SDD)
 │   ├── specs/                  SPEC-001..005
 │   ├── adrs/                   ADR-0001..0006
 │   ├── roadmap.md              R-1..R-10
-│   └── execution/              plan + TASKS por slice
+│   └── execution/              plan + TASKS per slice
 └── src/
     ├── main/java/com/hackerrank/sample/
     │   ├── Application.java
@@ -237,24 +316,24 @@ flowchart TB
     │   ├── application.yml
     │   ├── attribute-metadata.json
     │   └── prompts/            compare-summary.v2.md, category-insights.v3.md
-    └── test/                   espelho da estrutura de main/
+    └── test/                   mirrors the structure of main/
 ```
 
-## O que não está aqui (e onde foi parar)
+## What is not here (and where it lives)
 
-| Item                                            | Onde            |
-|-------------------------------------------------|-----------------|
-| Autenticação / autorização                      | não planejado   |
-| Operações de escrita (POST/PUT/DELETE)          | não planejado   |
-| Banco persistente                               | roadmap R-1     |
-| Busca semântica (`/search` com embeddings)      | roadmap R-2/R-3 |
-| Filter extraction por LLM                       | roadmap R-3     |
-| Rate limiting                                   | roadmap R-6     |
-| Multi-currency / FX                             | roadmap R-8     |
-| Multi-tenant / per-vertical prompts             | roadmap R-4     |
+| Item                                            | Where            |
+|-------------------------------------------------|------------------|
+| Authentication / authorization                  | not planned      |
+| Write operations (POST/PUT/DELETE)              | not planned      |
+| Persistent database                             | roadmap R-1      |
+| Semantic search (`/search` with embeddings)     | roadmap R-2/R-3  |
+| LLM filter extraction                           | roadmap R-3      |
+| Rate limiting                                   | roadmap R-6      |
+| Multi-currency / FX                             | roadmap R-8      |
+| Multi-tenant / per-vertical prompts             | roadmap R-4      |
 
-A omissão é deliberada e rastreada — não é dívida silenciosa.
+The omissions are deliberate and tracked — not silent debt.
 
-## Licença
+## License
 
-MIT — ver cabeçalho em `OpenApiConfig`.
+MIT — see the header in `OpenApiConfig`.
