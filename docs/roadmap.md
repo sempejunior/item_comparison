@@ -1,9 +1,9 @@
 ---
 id: ROADMAP
 title: Production scaling and next bets
-version: v2
+version: v3
 status: Draft
-last_updated: 2026-04-28
+last_updated: 2026-04-30
 ---
 
 # Roadmap — From challenge to production
@@ -352,6 +352,76 @@ the offer's native currency.
 
 ---
 
+---
+
+## R-9 · Natural-language category exploration (RAG over insights)
+
+**Trigger.** SPEC-005 is live and shoppers ask the catalog questions in
+their own words — not "show me SMARTPHONE insights" but *"qual celular
+custa até R$ 3000 e tem boa bateria?"* or *"melhor notebook leve para
+viagem"*. The enum-based `category` parameter cannot answer that.
+
+**Approach.** Two layered evolutions on top of SPEC-005, each shippable
+independently:
+
+### R-9.1 Free-form query → category insights
+
+1. New endpoint `GET /api/v1/products/explore?q=<natural-language>&topK=`.
+2. **LLM filter extraction** (R-3 reused) maps the query to
+   `(category, attribute constraints)`. Constraints are validated
+   against the existing attribute metadata; anything unrecognized is
+   dropped, not raised.
+3. The structured constraints feed `CategoryInsightsService` (SPEC-005)
+   so the response shape is the same `rankings[] / topItems[] / summary`
+   the frontend already renders. Only the entry point changes.
+4. The LLM `summary` is given the **original user query** as additional
+   prompt context so the panorama is framed around what the user
+   actually asked.
+
+### R-9.2 RAG over rankings
+
+1. Embeddings of the seed catalog (R-2.0 vector store) plus embeddings
+   of the *deterministic ranking entries* are stored alongside each
+   product.
+2. Query is embedded; top-K products by cosine similarity are mixed
+   with the deterministic insights from R-9.1 in a single LLM rerank
+   prompt that explains *why* each item fits the query and how it
+   compares on the key attributes.
+3. Lexical fallback when the LLM is down: regex over `name +
+   description + attributes`, scored by attribute matches relative to
+   the parsed constraints from R-9.1. The endpoint never returns 503.
+
+**Architecture.**
+
+```mermaid
+flowchart LR
+  Q[GET /products/explore?q=...] --> Extract[LLM: extract category + filters]
+  Extract --> Insights[CategoryInsightsService<br/>SPEC-005]
+  Q --> Embed[Query embedding]
+  Embed --> Vec[(Vector store<br/>R-2.0)]
+  Vec --> Top[Top-K candidates]
+  Insights --> Merge[Merge: rankings ∪ candidates]
+  Top --> Merge
+  Merge --> Rerank[LLM rerank + per-item explanation<br/>+ panorama summary]
+  Rerank --> Resp[Response: rankings + topItems + summary + perItemExplanations]
+  Q -.->|LLM down| Lex[Lexical fallback]
+  Lex --> Resp
+```
+
+**Tradeoffs.** Adds two LLM calls per query (extract + rerank). Cost is
+mitigated by caching `(normalizedQuery, locale)` and by the budget guard
+already enforced for SPEC-004/SPEC-005 (`DailyBudget`). The
+deterministic guarantee weakens — two queries that mean the same thing
+in different words will produce slightly different responses. Mitigation:
+the cache key normalizes the query (lowercase, trimmed punctuation) and
+the deterministic `rankings[]` for the inferred category remains the
+load-bearing payload — only the framing changes.
+
+**Effort.** R-9.1 ~2 dev-days on top of SPEC-005 + R-3. R-9.2 ~3
+dev-days on top of R-2.0 + R-9.1.
+
+---
+
 ## What we explicitly do not plan to do
 
 - **GraphQL.** REST + sparse fieldsets covers the same need with less
@@ -378,9 +448,17 @@ the offer's native currency.
 | R-6 Resilience / SLO | 4 | Production gate |
 | R-7 Observability uplift | 3 | Production gate |
 | R-8 Multi-region | 5 | Business-driven |
+| R-9.1 Free-form query → category insights | 2 | After SPEC-005 + R-3 |
+| R-9.2 RAG over rankings | 3 | After R-2.0 + R-9.1 |
 
 ## Changelog
 
+- **v3 (2026-04-30)** — Added R-9 (Natural-language category
+  exploration) as a two-step evolution of SPEC-005: R-9.1 wraps an
+  LLM filter extractor over `CategoryInsightsService` so the user can
+  ask in free-form text instead of choosing a category enum; R-9.2
+  layers vector retrieval (R-2.0) and per-item rerank explanations on
+  top. Effort table updated accordingly.
 - **v2 (2026-04-28)** — Added R-2.0 (Semantic search introduction) at
   the top of R-2 to capture the level-2 RAG that v1 of SPEC-001
   originally proposed and that v3 deferred. R-2.1+ explicitly described
