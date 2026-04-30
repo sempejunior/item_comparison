@@ -74,9 +74,23 @@ Hard rules (do not violate):
 - If a pick is null, skip it silently — do not invent a substitute.
 - No second-person address ("you/voce") except in the closing
   directive.
-- Close with exactly one short directive of the form
-  "Se a prioridade e <X>, escolha <Y>." (pt-BR) or
-  "If <X> matters most, go with <Y>." (en), where Y is one of the picks.
+- Close with exactly one short directive that names a real shopper
+  priority and one of the picks by name. Use this shape:
+    pt-BR: "Se a prioridade e {SHOPPER_PRIORITY}, escolha {PICK_NAME}."
+    en:    "If {SHOPPER_PRIORITY} matters most, go with {PICK_NAME}."
+  Both `{SHOPPER_PRIORITY}` and `{PICK_NAME}` are placeholders that you
+  MUST replace with concrete words before emitting the sentence.
+  `{SHOPPER_PRIORITY}` is a short noun phrase that MUST be written in
+  the target language. For pt-BR use phrasings like "gastar menos",
+  "desempenho", "qualidade percebida", "capacidade", "tamanho de tela",
+  "portabilidade". For en use phrasings like "budget", "performance",
+  "perceived quality", "capacity", "screen size", "portability". Never
+  mix languages — do not output English priority words inside pt-BR
+  prose. `{PICK_NAME}` is the exact `name` of one of the three picks. NEVER output the literal tokens
+  "{SHOPPER_PRIORITY}", "{PICK_NAME}", "<X>", "<Y>", or any other
+  unfilled placeholder, angle bracket, or curly-brace marker. If you
+  are about to emit such a token, stop and substitute the concrete
+  word instead.
 
 How to pick concrete reasons:
 - Read each pick's `highlights` array. If it contains attribute leads
