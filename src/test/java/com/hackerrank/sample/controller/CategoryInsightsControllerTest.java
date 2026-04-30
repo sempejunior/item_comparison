@@ -79,4 +79,25 @@ class CategoryInsightsControllerTest {
         mockMvc.perform(get("/api/v1/products/category-insights"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void minPriceNegative_returns400Validation() throws Exception {
+        mockMvc.perform(get("/api/v1/products/category-insights?category=SMARTPHONE&minPrice=-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://api.example.com/errors/validation"));
+    }
+
+    @Test
+    void minRatingOutOfRange_returns400Validation() throws Exception {
+        mockMvc.perform(get("/api/v1/products/category-insights?category=SMARTPHONE&minRating=6"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://api.example.com/errors/validation"));
+    }
+
+    @Test
+    void minPriceGreaterThanMaxPrice_returns400Validation() throws Exception {
+        mockMvc.perform(get("/api/v1/products/category-insights?category=SMARTPHONE&minPrice=3000&maxPrice=2000"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://api.example.com/errors/validation"));
+    }
 }

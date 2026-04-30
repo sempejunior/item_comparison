@@ -9,6 +9,7 @@ import com.hackerrank.sample.model.DifferenceEntry;
 import com.hackerrank.sample.model.Language;
 import com.hackerrank.sample.model.insights.RankingEntry;
 import com.hackerrank.sample.model.insights.TopItem;
+import com.hackerrank.sample.service.insights.InsightsFilters;
 import com.hackerrank.sample.service.insights.Picks;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -288,6 +289,28 @@ class SummaryServiceTest {
         verify(chatModel, times(1)).call(any(Prompt.class));
         assertThat(counterCount("ai_calls_total", "outcome", "cache_hit")).isEqualTo(1.0);
         assertThat(counterCount("ai_calls_total", "outcome", "ok")).isEqualTo(1.0);
+    }
+
+    @Test
+    void insightsCacheKey_versionsByFiltersPresenceAndIsStable() {
+        SummaryService service = service(() -> "sk-real");
+        List<RankingEntry> rankings = List.<RankingEntry>of();
+        List<TopItem> topItems = List.<TopItem>of();
+
+        String unfiltered = service.insightsCacheKey(
+                Category.SMARTPHONE, 3, rankings, topItems, null, null, Language.PT_BR);
+        assertThat(unfiltered).startsWith("v3|").endsWith("|");
+
+        InsightsFilters filtersA = new InsightsFilters(new BigDecimal("1000"), new BigDecimal("2000.00"), 4.5);
+        InsightsFilters filtersB = new InsightsFilters(new BigDecimal("1000.0"), new BigDecimal("2000"), 4.5);
+        String keyA = service.insightsCacheKey(
+                Category.SMARTPHONE, 3, rankings, topItems, null, filtersA, Language.PT_BR);
+        String keyB = service.insightsCacheKey(
+                Category.SMARTPHONE, 3, rankings, topItems, null, filtersB, Language.PT_BR);
+
+        assertThat(keyA).startsWith("v3.1|").endsWith("|" + filtersA.digest());
+        assertThat(keyB).isEqualTo(keyA);
+        assertThat(keyA).isNotEqualTo(unfiltered);
     }
 
     @Test
