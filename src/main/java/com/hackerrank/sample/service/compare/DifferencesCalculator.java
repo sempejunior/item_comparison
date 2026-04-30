@@ -23,15 +23,14 @@ import java.util.TreeSet;
  */
 public final class DifferencesCalculator {
 
-    private static final Set<String> HIGHER_BETTER_ATTRS = Set.of(
-            "battery", "memory", "storage", "screen_size_inches",
-            "refresh_rate_hz", "hdmi_ports", "capacity_l");
-    private static final Set<String> LOWER_BETTER_ATTRS = Set.of("weight", "weight_kg");
-
     private DifferencesCalculator() {
     }
 
     public static DiffResult compute(List<ProductDetail> products, FieldSet fields) {
+        return compute(products, fields, AttributeMetadata.defaultRegistry());
+    }
+
+    public static DiffResult compute(List<ProductDetail> products, FieldSet fields, AttributeMetadata metadata) {
         if (products == null || products.size() < 2) {
             return new DiffResult(List.of(), Map.of());
         }
@@ -47,7 +46,7 @@ public final class DifferencesCalculator {
             if (allEqual(values)) {
                 continue;
             }
-            DiffOutcome outcome = computeOutcome(path, products, values);
+            DiffOutcome outcome = computeOutcome(path, products, values, metadata);
             DifferenceEntry entry = new DifferenceEntry(
                     path, outcome.comparable(), outcome.winnerId(), values);
             if (outcome.comparable()) {
@@ -123,7 +122,8 @@ public final class DifferencesCalculator {
         return true;
     }
 
-    private static DiffOutcome computeOutcome(String path, List<ProductDetail> products, Map<Long, Object> values) {
+    private static DiffOutcome computeOutcome(
+            String path, List<ProductDetail> products, Map<Long, Object> values, AttributeMetadata metadata) {
         boolean anyNull = values.values().stream().anyMatch(Objects::isNull);
         if (anyNull) {
             return new DiffOutcome(false, null);
@@ -136,12 +136,11 @@ public final class DifferencesCalculator {
         }
         if (path.startsWith("attributes.")) {
             String key = path.substring("attributes.".length());
-            if (HIGHER_BETTER_ATTRS.contains(key)) {
-                return numericOutcome(values, true);
-            }
-            if (LOWER_BETTER_ATTRS.contains(key)) {
-                return numericOutcome(values, false);
-            }
+            return switch (metadata.directionFor(key)) {
+                case HIGHER_BETTER -> numericOutcome(values, true);
+                case LOWER_BETTER -> numericOutcome(values, false);
+                case NONE -> new DiffOutcome(false, null);
+            };
         }
         return new DiffOutcome(false, null);
     }
