@@ -16,7 +16,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -48,6 +52,33 @@ public class ProductService {
         CatalogProductEntity product = products.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException(id));
         List<OfferEntity> productOffers = offers.findAllByCatalogProductId(id);
+        return assemble(product, productOffers);
+    }
+
+    public List<ProductDetail> getByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, CatalogProductEntity> productsById = new LinkedHashMap<>();
+        for (CatalogProductEntity p : products.findAllByIdIn(ids)) {
+            productsById.put(p.getId(), p);
+        }
+        Map<Long, List<OfferEntity>> offersByProduct = new LinkedHashMap<>();
+        for (OfferEntity offer : offers.findAllByCatalogProductIdIn(productsById.keySet())) {
+            offersByProduct.computeIfAbsent(offer.getCatalogProductId(), k -> new ArrayList<>()).add(offer);
+        }
+        List<ProductDetail> result = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            CatalogProductEntity product = productsById.get(id);
+            if (product == null) {
+                throw new ProductNotFoundException(id);
+            }
+            result.add(assemble(product, offersByProduct.getOrDefault(id, List.of())));
+        }
+        return result;
+    }
+
+    private ProductDetail assemble(CatalogProductEntity product, List<OfferEntity> productOffers) {
         Optional<OfferEntity> buyBox = BuyBoxSelector.select(productOffers);
         return new ProductDetail(
                 product.getId(),
